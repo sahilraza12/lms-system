@@ -1,0 +1,207 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  CENTER
+  STUDENT
+}
+
+enum FeeType {
+  ONE_TIME
+  EMI
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+enum CertificateStatus {
+  REQUESTED
+  VERIFIED
+  APPROVED
+  ISSUED
+  REJECTED
+}
+
+// 1. Central User Authentication
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      Role     @default(STUDENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  center    Center?
+  student   Student?
+}
+
+// 2. Training Center Details
+model Center {
+  id               String   @id @default(uuid())
+  centerCode       String   @unique // e.g. CTR-001
+  name             String
+  authorizedPerson String
+  phone            String
+  address          String
+  isActive         Boolean  @default(true)
+  
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  students         Student[]
+  createdAt        DateTime @default(now())
+}
+
+// 3. Course Details
+model Course {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  duration    String   // e.g. 6 Months
+  totalFee    Float
+  
+  students    Student[]
+  notes       Note[]
+  tasks       Task[]
+  
+  createdAt   DateTime @default(now())
+}
+
+// 4. Student Profile
+model Student {
+  id           String        @id @default(uuid())
+  studentCode  String        @unique // e.g. STU-1001
+  fullName     String
+  phone        String
+  dob          DateTime
+  gender       String
+  address      String
+  govIdNumber  String?
+  docUrl       String?
+  
+  userId       String        @unique
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  centerId     String
+  center       Center        @relation(fields: [centerId], references: [id])
+  
+  courseId     String
+  course       Course        @relation(fields: [courseId], references: [id])
+  
+  feePlan      FeePlan?
+  certificates Certificate[]
+  submissions   TaskSubmission[]
+  createdAt    DateTime      @default(now())
+}
+
+// 5. Fee & EMI Engine
+model FeePlan {
+  id           String        @id @default(uuid())
+  studentId    String        @unique
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  type         FeeType       @default(ONE_TIME)
+  totalAmount  Float
+  paidAmount   Float         @default(0)
+  balance      Float
+  status       PaymentStatus @default(PENDING)
+  
+  installments Installment[]
+  payments     Payment[]
+  createdAt    DateTime      @default(now())
+}
+
+model Installment {
+  id        String        @id @default(uuid())
+  feePlanId String
+  feePlan   FeePlan       @relation(fields: [feePlanId], references: [id], onDelete: Cascade)
+  
+  dueDate   DateTime
+  amount    Float
+  status    PaymentStatus @default(PENDING)
+  paidAt    DateTime?
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  feePlanId   String
+  feePlan     FeePlan  @relation(fields: [feePlanId], references: [id], onDelete: Cascade)
+  
+  amount      Float
+  paymentDate DateTime @default(now())
+  mode        String   // CASH, ONLINE, CHEQUE
+  receiptUrl  String?
+}
+
+// 6. Certificate & Public Verification
+model Certificate {
+  id              String            @id @default(uuid())
+  certNumber      String            @unique // e.g. CERT-2026-9901
+  studentId       String
+  student         Student           @relation(fields: [studentId], references: [id])
+  
+  certType        String            // Company, Skill India, International
+  status          CertificateStatus @default(REQUESTED)
+  issueDate       DateTime?
+  verificationUrl String?
+  createdAt       DateTime          @default(now())
+}
+
+// 7. Notes & Study Materials
+model Note {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  fileUrl     String
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+}
+
+// 8. Assignments & Tasks
+model Task {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  dueDate     DateTime
+  courseId    String
+  submissions   TaskSubmission[]
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+}
+
+model Announcement {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  target    String   @default("ALL") // Can be "ALL", "CENTER", or "STUDENT"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TaskSubmission {
+  id           String    @id @default(uuid())
+  submissionUrl String   // GitHub repo link, Drive URL ya hosted link
+  remarks      String?   // Candidate remarks / comments
+  submittedAt  DateTime  @default(now())
+
+  taskId       String
+  task         Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  studentId    String
+  student      Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, studentId]) // Har task ke liye ek student ka ek hi submission
+}
