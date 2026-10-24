@@ -1,52 +1,121 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getCurrentUser } from '@/lib/auth';
+import { Role } from '@prisma/client';
 
-// Fetch all announcements (GET)
-export async function GET(req: Request) {
+// 1. Fetch all circulars with target scope details
+export async function GET() {
   try {
-    const { searchParams } = new URL(req.url);
-    const target = searchParams.get('target');
+    const user = await getCurrentUser();
+    if (user && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized: Admin access only' }, { status: 403 });
+    }
 
     const announcements = await db.announcement.findMany({
-      where: target ? { target: { in: ['ALL', target] } } : undefined,
       orderBy: { createdAt: 'desc' },
+      include: {
+        center: {
+          select: {
+            id: true,
+            name: true,
+            centerCode: true,
+          },
+        },
+      },
     });
 
-    return NextResponse.json({ announcements }, { status: 200 });
-  } catch (error) {
-    console.error('Error fetching announcements:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    const centers = await db.center.findMany({
+      select: { id: true, name: true, centerCode: true },
+      orderBy: { name: 'asc' },
+    });
+
+    return NextResponse.json({
+      success: true,
+      announcements,
+      centers,
+    });
+  } catch (error: any) {
+    console.error('Fetch Announcements Error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to fetch circular broadcasts.' },
+      { status: 500 }
+    );
   }
 }
 
-// Create a new announcement (POST)
+// 2. Broadcast a new official circular
 export async function POST(req: Request) {
   try {
-    const body: unknown = await req.json();
-    if (!body || typeof body !== 'object') {
-      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
-    }
-    const { title, content, target } = body as Record<string, unknown>;
-
-    if (typeof title !== 'string' || !title.trim() || typeof content !== 'string' || !content.trim()) {
-      return NextResponse.json({ error: 'Title and content are required' }, { status: 400 });
+    const user = await getCurrentUser();
+    if (user && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized: Admin access only' }, { status: 403 });
     }
 
-    if (target !== undefined && !['ALL', 'CENTER', 'STUDENT'].includes(String(target))) {
-      return NextResponse.json({ error: 'Invalid announcement target' }, { status: 400 });
+    const body = await req.json();
+    const { title, content, targetRole, centerId, isPinned } = body;
+
+    if (!title || !content) {
+      return NextResponse.json(
+        { error: 'Circular heading title and message content are required.' },
+        { status: 400 }
+      );
     }
 
     const announcement = await db.announcement.create({
       data: {
         title: title.trim(),
         content: content.trim(),
-        target: typeof target === 'string' ? target : 'ALL',
+        senderId: user?.userId || 'ADMIN',
+        senderRole: (user?.role as Role) || Role.ADMIN,
+        senderName: user?.email || 'Central Academic Office',
+        targetRole: targetRole || null,
+        centerId: centerId || null,
+        isPinned: Boolean(isPinned),
       },
     });
 
-    return NextResponse.json({ announcement, message: 'Notice published successfully' }, { status: 201 });
-  } catch (error) {
-    console.error('Error creating announcement:', error);
-    return NextResponse.json({ error: 'Failed to publish notice' }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      message: 'Official circular broadcasted across designated channels.',
+      announcement,
+    });
+  } catch (error: any) {
+    console.error('Broadcast Circular Error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to dispatch circular broadcast.' },
+      { status: 500 }
+    );
+  }
+}
+
+// 3. Delete circular
+export async function DELETE(req: Request) {
+  try {
+    const user = await getCurrentUser();
+    if (user && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized: Admin access only' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'Announcement ID is required.' }, { status: 400 });
+    }
+
+    await db.announcement.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Circular removed from active broadcast channels.',
+    });
+  } catch (error: any) {
+    console.error('Delete Circular Error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to delete circular.' },
+      { status: 500 }
+    );
   }
 }

@@ -1,33 +1,26 @@
-import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
-import { JWT_SECRET } from '@/lib/jwt-secret';
+import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '@/lib/jwt-secret';
 
-export interface TokenPayload {
+export interface AuthenticatedUser {
   userId: string;
   email: string;
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'CENTER' | 'STUDENT';
-  centerId?: string | null;
+  role: string;
   studentId?: string | null;
+  centerId?: string | null;
+  teacherId?: string | null;
+  fullName?: string;
 }
 
-export function signToken(payload: TokenPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
-}
-
-export function verifyToken(token: string): TokenPayload | null {
-  try {
-    return jwt.verify(token, JWT_SECRET) as TokenPayload;
-  } catch {
-    return null;
-  }
-}
-
-export async function getCurrentUser(): Promise<TokenPayload | null> {
+export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   try {
     const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
+    const token = cookieStore.get('viq-session')?.value;
+
     if (!token) return null;
-    return verifyToken(token);
+
+    const decoded = jwt.verify(token, getJwtSecret()) as AuthenticatedUser;
+    return decoded;
   } catch {
     return null;
   }

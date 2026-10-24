@@ -4,10 +4,19 @@ import { useState } from 'react';
 import { ShieldCheck, Search, CheckCircle2, AlertCircle, Lock, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
+interface VerifiedCredential {
+  studentName?: string;
+  name?: string;
+  courseName?: string;
+  course?: { name?: string };
+  certificateNumber?: string;
+  enrollmentNo?: string;
+}
+
 export default function VerifyCredential() {
   const [certId, setCertId] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<VerifiedCredential | null>(null);
   const [error, setError] = useState('');
 
   const handleVerify = async (e: React.FormEvent) => {
@@ -23,7 +32,7 @@ export default function VerifyCredential() {
       const data = await res.json();
 
       if (res.ok && data && !data.error) {
-        setResult(data.certificate || data.student || data);
+        setResult(data.certificate as VerifiedCredential);
       } else {
         setError(data.error || 'No valid VIQ cryptographic record found for this ID.');
       }
@@ -108,7 +117,7 @@ export default function VerifyCredential() {
                 </div>
                 <div>
                   <span className="viq-text-muted block text-[10px] font-mono uppercase">Credential Code</span>
-                  <span className="text-orange-500 font-mono font-bold">{result.certificateNumber || result.enrollmentNo || certId}</span>
+                  <span className="text-orange-500 font-mono font-bold">{result.certificateNumber || certId}</span>
                 </div>
                 <div>
                   <span className="viq-text-muted block text-[10px] font-mono uppercase">Status</span>

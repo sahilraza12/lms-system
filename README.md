@@ -20,6 +20,23 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Seed demo data
+
+Configure `DATABASE_URL` and `DIRECT_URL`, then set a `SEED_PASSWORD` of 12–72 UTF-8 bytes before running `npx prisma db seed`. The seed is transactional and repeatable, does not delete existing records, preserves passwords on existing accounts by default, and refuses to run when `NODE_ENV` is `production`. To intentionally change passwords for the five seeded demo accounts, set `SEED_RESET_PASSWORDS=true` for that seed run.
+
+In PowerShell:
+
+```powershell
+$env:SEED_PASSWORD = "replace-with-a-strong-demo-password"
+$env:SEED_RESET_PASSWORDS = "true"
+npx prisma db seed
+$env:SEED_RESET_PASSWORDS = "false"
+```
+
+Use a database owner/direct connection for `DIRECT_URL` (not a pooled connection). Set the two password environment variables in the same PowerShell session where the seed command runs.
+
+For production, configure a private `JWT_SECRET` containing at least 32 characters. The application refuses to issue or verify sessions without it; development uses a local-only fallback.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

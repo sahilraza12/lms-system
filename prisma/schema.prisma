@@ -1,16 +1,21 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // Pooled connection string (PgBouncer / Supabase 6543)
 }
 
 generator client {
   provider = "prisma-client-js"
 }
 
+// ----------------------------------------------------
+// ENUMS
+// ----------------------------------------------------
+
 enum Role {
   SUPER_ADMIN
   ADMIN
-  CENTER
+  CENTER_ADMIN // Standardized RBAC role matching Next.js middleware
+  TEACHER
   STUDENT
 }
 
@@ -34,7 +39,39 @@ enum CertificateStatus {
   REJECTED
 }
 
-// 1. Central User Authentication
+enum TaskSubmissionStatus {
+  SUBMITTED
+  REVIEWED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+enum NoticePriority {
+  NORMAL
+  IMPORTANT
+  URGENT
+}
+
+// ----------------------------------------------------
+// 0. SIGNUP EMAIL OTP VERIFICATION
+// ----------------------------------------------------
+model OtpVerification {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  otp       String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email, expiresAt])
+}
+
+// ----------------------------------------------------
+// 1. CENTRAL USER AUTHENTICATION
+// ----------------------------------------------------
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -43,11 +80,19 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  center    Center?
-  student   Student?
+  center           Center?
+  teacher          Teacher?
+  student          Student?
+  sentMessages     ChatMessage[]           @relation("SentMessages")
+  receivedMessages ChatMessage[]           @relation("ReceivedMessages")
+  receivedNotices  AnnouncementRecipient[]
+
+  @@index([role])
 }
 
-// 2. Training Center Details
+// ----------------------------------------------------
+// 2. TRAINING CENTER DETAILS (TENANT SCOPE)
+// ----------------------------------------------------
 model Center {
   id               String   @id @default(uuid())
   centerCode       String   @unique // e.g. CTR-001
@@ -56,152 +101,335 @@ model Center {
   phone            String
   address          String
   isActive         Boolean  @default(true)
-  
+
   userId           String   @unique
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
+  teachers         Teacher[]
   students         Student[]
+  announcements    Announcement[]
   createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([centerCode, isActive])
 }
 
-// 3. Course Details
+// ----------------------------------------------------
+// 3. TEACHER PROFILE (CREATED & MANAGED BY CENTER)
+// ----------------------------------------------------
+model Teacher {
+  id                String       @id @default(uuid())
+  teacherCode       String       @unique // e.g. TCH-101
+  fullName          String
+  phone             String
+  specialization    String?      // e.g. MERN Stack, Cybersecurity
+  isActive          Boolean      @default(true)
+
+  userId            String       @unique
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  centerId          String
+  center            Center       @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  assignedStudents  Student[]
+  attendancesMarked Attendance[]
+  tasksAssigned     Task[]
+  announcements     Announcement[]
+
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@index([centerId, isActive])
+}
+
+// ----------------------------------------------------
+// 4. COURSE DETAILS
+// ----------------------------------------------------
 model Course {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
+  courseCode  String?   @unique // e.g. FSW-2026
   title       String
-  description String?
-  duration    String   // e.g. 6 Months
+  description String?   @db.Text
+  duration    String    // e.g. 6 Months
   totalFee    Float
-  
+  level       String?   @default("INTERMEDIATE")
+
   students    Student[]
   notes       Note[]
   tasks       Task[]
-  
-  createdAt   DateTime @default(now())
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([totalFee])
 }
 
-// 4. Student Profile
+// ----------------------------------------------------
+// 5. STUDENT PROFILE (LINKED TO CENTER & ASSIGNED TEACHER)
+// ----------------------------------------------------
 model Student {
-  id           String        @id @default(uuid())
-  studentCode  String        @unique // e.g. STU-1001
-  fullName     String
-  phone        String
-  dob          DateTime
-  gender       String
-  address      String
-  govIdNumber  String?
-  docUrl       String?
-  
-  userId       String        @unique
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  centerId     String
-  center       Center        @relation(fields: [centerId], references: [id])
-  
-  courseId     String
-  course       Course        @relation(fields: [courseId], references: [id])
-  
-  feePlan      FeePlan?
-  certificates Certificate[]
-  submissions   TaskSubmission[]
-  createdAt    DateTime      @default(now())
+  id                String            @id @default(uuid())
+  studentCode       String            @unique // e.g. STU-1001
+  fullName          String
+  phone             String
+  dob               DateTime
+  gender            String
+  address           String
+  govIdNumber       String?
+  docUrl            String?
+
+  userId            String            @unique
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  centerId          String
+  center            Center            @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  teacherId         String?
+  assignedTeacher   Teacher?          @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  courseId          String
+  course            Course            @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  feePlan           FeePlan?
+  certificates      Certificate[]
+  submissions       TaskSubmission[]
+  attendanceRecords Attendance[]
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  // Composite indices for instant tenant-level searches and cohort filtering
+  @@index([centerId, teacherId])
+  @@index([centerId, courseId])
+  @@index([createdAt(sort: Desc)])
 }
 
-// 5. Fee & EMI Engine
+// ----------------------------------------------------
+// 6. FEE, EMI & AUTOMATED NOTIFICATIONS ENGINE
+// ----------------------------------------------------
 model FeePlan {
   id           String        @id @default(uuid())
   studentId    String        @unique
   student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  
+
   type         FeeType       @default(ONE_TIME)
   totalAmount  Float
   paidAmount   Float         @default(0)
   balance      Float
   status       PaymentStatus @default(PENDING)
-  
+
   installments Installment[]
   payments     Payment[]
   createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([status, balance])
 }
 
 model Installment {
-  id        String        @id @default(uuid())
-  feePlanId String
-  feePlan   FeePlan       @relation(fields: [feePlanId], references: [id], onDelete: Cascade)
-  
-  dueDate   DateTime
-  amount    Float
-  status    PaymentStatus @default(PENDING)
-  paidAt    DateTime?
+  id          String        @id @default(uuid())
+  feePlanId   String
+  feePlan     FeePlan       @relation(fields: [feePlanId], references: [id], onDelete: Cascade)
+
+  dueDate     DateTime
+  amount      Float
+  status      PaymentStatus @default(PENDING)
+  paidAt      DateTime?
+
+  // Automated EMI Due Reminder Tracking (7d, 2d, 1d prior)
+  alert7dSent Boolean       @default(false)
+  alert2dSent Boolean       @default(false)
+  alert1dSent Boolean       @default(false)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([feePlanId, status, dueDate])
 }
 
 model Payment {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
+  receiptNo   String?   @unique
   feePlanId   String
-  feePlan     FeePlan  @relation(fields: [feePlanId], references: [id], onDelete: Cascade)
-  
+  feePlan     FeePlan   @relation(fields: [feePlanId], references: [id], onDelete: Cascade)
+
   amount      Float
-  paymentDate DateTime @default(now())
-  mode        String   // CASH, ONLINE, CHEQUE
-  receiptUrl  String?
+  paymentDate DateTime  @default(now())
+  mode        String    // CASH, ONLINE, CHEQUE, UPI
+  receiptUrl  String?   // Downloadable PDF/receipt link
+  createdAt   DateTime  @default(now())
+
+  @@index([feePlanId, paymentDate(sort: Desc)])
 }
 
-// 6. Certificate & Public Verification
+// ----------------------------------------------------
+// 7. ATTENDANCE SYSTEM (TEACHER MARKS ATTENDANCE)
+// ----------------------------------------------------
+model Attendance {
+  id        String           @id @default(uuid())
+  date      DateTime         @default(now()) @db.Date // Strict calendar date without timestamp drift
+  status    AttendanceStatus @default(PRESENT)
+
+  studentId String
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  teacherId String
+  teacher   Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime         @default(now())
+
+  @@unique([studentId, date]) // Ensures atomic single roll-call per calendar day
+  @@index([teacherId, date])
+  @@index([studentId, status])
+}
+
+// ----------------------------------------------------
+// 8. 1-ON-1 STUDENT-TEACHER CHAT
+// ----------------------------------------------------
+model ChatMessage {
+  id         String   @id @default(uuid())
+  senderId   String
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  receiverId String
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  message    String   @db.Text
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([senderId, receiverId, createdAt(sort: Desc)])
+}
+
+// ----------------------------------------------------
+// 9. CERTIFICATE & PUBLIC VERIFICATION
+// ----------------------------------------------------
 model Certificate {
   id              String            @id @default(uuid())
   certNumber      String            @unique // e.g. CERT-2026-9901
   studentId       String
-  student         Student           @relation(fields: [studentId], references: [id])
-  
+  student         Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
   certType        String            // Company, Skill India, International
   status          CertificateStatus @default(REQUESTED)
   issueDate       DateTime?
   verificationUrl String?
   createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([studentId, status])
 }
 
-// 7. Notes & Study Materials
+// ----------------------------------------------------
+// 10. NOTES & STUDY MATERIALS
+// ----------------------------------------------------
 model Note {
   id          String   @id @default(uuid())
   title       String
-  description String?
+  description String?  @db.Text
   fileUrl     String
   courseId    String
   course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
+
+  @@index([courseId, createdAt(sort: Desc)])
 }
 
-// 8. Assignments & Tasks
+// ----------------------------------------------------
+// 11. ASSIGNMENTS & LAB WORK
+// ----------------------------------------------------
 model Task {
-  id          String   @id @default(uuid())
+  id          String           @id @default(uuid())
   title       String
-  description String
+  description String           @db.Text
   dueDate     DateTime
   courseId    String
-  submissions   TaskSubmission[]
-  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
+  course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  teacherId   String?
+  teacher     Teacher?         @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  submissions TaskSubmission[]
+  createdAt   DateTime         @default(now())
+
+  @@index([courseId, dueDate])
+  @@index([teacherId, createdAt(sort: Desc)])
 }
 
-model Announcement {
-  id        String   @id @default(uuid())
-  title     String
-  content   String
-  target    String   @default("ALL") // Can be "ALL", "CENTER", or "STUDENT"
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
+// ----------------------------------------------------
+// 12. TASK SUBMISSION WITH UN-SUBMIT & REVIEW SUPPORT
+// ----------------------------------------------------
 model TaskSubmission {
-  id           String    @id @default(uuid())
-  submissionUrl String   // GitHub repo link, Drive URL ya hosted link
-  remarks      String?   // Candidate remarks / comments
-  submittedAt  DateTime  @default(now())
+  id            String               @id @default(uuid())
+  submissionUrl String?              // GitHub / Drive URL
+  fileUrls      String[]             // Multi-file upload support (PDF, ZIP, Code)
+  remarks       String?              @db.Text // Candidate execution notes
 
-  taskId       String
-  task         Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  status        TaskSubmissionStatus @default(SUBMITTED) // SUBMITTED -> REVIEWED
+  feedback      String?              @db.Text // Mentor feedback & rating
+  reviewedAt    DateTime?
 
-  studentId    String
-  student      Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  submittedAt   DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 
-  @@unique([taskId, studentId]) // Har task ke liye ek student ka ek hi submission
+  taskId        String
+  task          Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  studentId     String
+  student       Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, studentId])
+  @@index([taskId, status])
+  @@index([studentId, status])
+}
+
+// ----------------------------------------------------
+// 13. MULTI-TIER ANNOUNCEMENT & NOTICE SYSTEM
+// ----------------------------------------------------
+model Announcement {
+  id          String         @id @default(uuid())
+  title       String
+  content     String         @db.Text
+  priority    NoticePriority @default(NORMAL)
+
+  // Sender Metadata
+  senderId    String
+  senderRole  Role           // SUPER_ADMIN, ADMIN, CENTER_ADMIN, TEACHER
+  senderName  String
+
+  // Scoping & Targeted Delivery
+  targetRole  Role?          // CENTER_ADMIN, TEACHER, STUDENT (Null = All)
+  centerId    String?        // Scope to specific center
+  center      Center?        @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  teacherId   String?        // Scope to specific teacher's cohort
+  teacher     Teacher?       @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  // Dispatch Telemetry
+  emailSent   Boolean        @default(false)
+  sentCount   Int            @default(0)
+
+  // Portal Read Tracking
+  recipients  AnnouncementRecipient[]
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([targetRole, priority, createdAt(sort: Desc)])
+  @@index([centerId, targetRole])
+}
+
+model AnnouncementRecipient {
+  id             String       @id @default(uuid())
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isRead         Boolean      @default(false)
+  readAt         DateTime?
+
+  createdAt      DateTime     @default(now())
+
+  @@unique([announcementId, userId])
+  @@index([userId, isRead])
 }

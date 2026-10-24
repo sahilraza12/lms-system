@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 
 interface LogoutButtonProps {
@@ -13,7 +12,6 @@ export default function LogoutButton({
   label = 'Sign Out',
   className,
 }: LogoutButtonProps) {
-  const router = useRouter();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -27,8 +25,7 @@ export default function LogoutButton({
         throw new Error(`Logout request failed (${response.status})`);
       }
 
-      router.replace('/login');
-      router.refresh();
+      window.location.replace('/login');
     } catch (logoutError) {
       console.error('Logout failed:', logoutError);
       setError('Unable to sign out. Please try again.');

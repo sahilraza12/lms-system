@@ -13,10 +13,19 @@ import {
   Lock 
 } from 'lucide-react';
 
+interface VerifiedCertificate {
+  certificateNumber: string;
+  studentName: string;
+  name?: string;
+  courseName: string;
+  branchName: string;
+  issueDate: string;
+}
+
 export default function VerifyCertificatePage() {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [record, setRecord] = useState<any>(null);
+  const [record, setRecord] = useState<VerifiedCertificate | null>(null);
   const [error, setError] = useState('');
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -28,28 +37,26 @@ export default function VerifyCertificatePage() {
     setRecord(null);
 
     try {
-      const res = await fetch(`/api/verify?code=${encodeURIComponent(code.trim())}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && !data.error) {
-          setRecord(data.certificate || data.student || data);
-          setLoading(false);
-          return;
-        }
-      }
-      if (code.toUpperCase().includes('2026') || code.toUpperCase().includes('VIQ')) {
-        setRecord({
-          certificateNumber: code.toUpperCase(),
-          studentName: 'Aarav Verma',
-          enrollmentNo: 'VIQ-2026-101',
-          courseName: 'Full-Stack Web Development (MERN)',
-          branchName: 'VIQ Technologies - Khanna HQ',
-          issueDate: '15 Oct 2026',
-          grade: 'A+ (Distinction)',
-          hash: '0x8F92B7C1E9043B9E1A4C',
-        });
+      const res = await fetch(`/api/verify?certNo=${encodeURIComponent(code.trim())}`);
+      const data: unknown = await res.json();
+      if (
+        res.ok &&
+        data &&
+        typeof data === 'object' &&
+        'valid' in data &&
+        data.valid === true &&
+        'certificate' in data
+      ) {
+        setRecord(data.certificate as VerifiedCertificate);
+      } else if (
+        data &&
+        typeof data === 'object' &&
+        'error' in data &&
+        typeof data.error === 'string'
+      ) {
+        setError(data.error);
       } else {
-        setError('No cryptographic credential record matched this identifier.');
+        setError('No issued certificate matches this number.');
       }
     } catch {
       setError('Verification service temporarily unreachable.');
@@ -93,7 +100,7 @@ export default function VerifyCertificatePage() {
               Global Credential Verification
             </h1>
             <p className="text-xs sm:text-sm viq-text-secondary max-w-md mx-auto">
-              Enter a candidate’s Certificate Number or ID (try <code className="text-orange-500 font-mono">VIQ-2026-101</code>) to validate authenticity.
+              Enter an issued certificate number to validate its authenticity.
             </p>
           </div>
 
@@ -132,34 +139,36 @@ export default function VerifyCertificatePage() {
                   Verified Authentic Record
                 </div>
                 <span className="text-[10px] font-mono viq-text-muted">
-                  {record.hash || '0x8F92...3B9E'}
+                  {record.issueDate
+                    ? new Date(record.issueDate).toLocaleDateString('en-IN')
+                    : 'Issued certificate'}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
                   <span className="text-[10px] font-mono uppercase viq-text-muted block font-bold">Candidate Name</span>
-                  <span className="text-sm font-black">{record.studentName || record.name}</span>
+                  <span className="text-sm font-black">{record.studentName || record.name || 'Verified candidate'}</span>
                 </div>
                 <div>
                   <span className="text-[10px] font-mono uppercase viq-text-muted block font-bold">Credential ID</span>
                   <span className="text-sm font-mono font-black text-orange-500">
-                    {record.certificateNumber || code.toUpperCase()}
+                    {record.certificateNumber}
                   </span>
                 </div>
                 <div>
                   <span className="text-[10px] font-mono uppercase viq-text-muted block font-bold">Certified Program</span>
-                  <span className="font-semibold">{record.courseName || 'Full-Stack MERN'}</span>
+                  <span className="font-semibold">{record.courseName}</span>
                 </div>
                 <div>
                   <span className="text-[10px] font-mono uppercase viq-text-muted block font-bold">Issuing Node</span>
-                  <span className="viq-text-secondary">{record.branchName || 'VIQ Technologies HQ'}</span>
+                  <span className="viq-text-secondary">{record.branchName}</span>
                 </div>
               </div>
 
               <div className="pt-3 border-t border-emerald-500/20 flex justify-end">
                 <Link
-                  href={`/certificate/${encodeURIComponent(record.certificateNumber || code.trim())}`}
+                  href={`/certificate/${encodeURIComponent(record.certificateNumber)}`}
                   className="viq-btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs"
                 >
                   <Award className="w-3.5 h-3.5" />

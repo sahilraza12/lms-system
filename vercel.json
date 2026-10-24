@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/center/emi-notifications",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}

@@ -1,208 +1,499 @@
-import { PrismaClient, Role, FeeType, PaymentStatus } from '@prisma/client';
+import 'dotenv/config';
+import {
+  PrismaClient,
+  Role,
+  FeeType,
+  PaymentStatus,
+  AttendanceStatus,
+  TaskSubmissionStatus,
+  NoticePriority,
+  CertificateStatus
+} from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Seeding initial LMS dataset...');
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Demo seed data must not be applied to a production database.');
+  }
 
-  // Common Password for Demo Accounts
-  const hashedPassword = await bcrypt.hash('password123', 10);
+  console.log('🌱 Starting comprehensive database seed for Multi-Tenant LMS...');
 
-  // 1. Super Admin Account
-  await prisma.user.upsert({
-    where: { email: 'admin@lms.com' },
-    update: { password: hashedPassword },
-    create: {
-      email: 'admin@lms.com',
-      password: hashedPassword,
-      role: Role.SUPER_ADMIN,
-    },
-  });
-  console.log(`✓ Super Admin created: admin@lms.com`);
+  const seedPassword = process.env.SEED_PASSWORD;
+  if (!seedPassword) {
+    throw new Error('Set SEED_PASSWORD before seeding demo accounts.');
+  }
+  const resetExistingPasswords = process.env.SEED_RESET_PASSWORDS === 'true';
+  if (
+    process.env.SEED_RESET_PASSWORDS &&
+    process.env.SEED_RESET_PASSWORDS !== 'true' &&
+    process.env.SEED_RESET_PASSWORDS !== 'false'
+  ) {
+    throw new Error('SEED_RESET_PASSWORDS must be either "true" or "false".');
+  }
+  if (seedPassword.length < 12) {
+    throw new Error('SEED_PASSWORD must be at least 12 characters long.');
+  }
+  if (Buffer.byteLength(seedPassword, 'utf8') > 72) {
+    throw new Error('SEED_PASSWORD must not exceed 72 UTF-8 bytes.');
+  }
+  const commonPassword = await bcrypt.hash(seedPassword, 12);
 
-  // 2. Default Training Center
-  const centerUser = await prisma.user.upsert({
-    where: { email: 'center@apexskills.com' },
-    update: {},
-    create: {
-      email: 'center@apexskills.com',
-      password: hashedPassword,
-      role: Role.CENTER,
-    },
-  });
-
-  const center = await prisma.center.upsert({
-    where: { centerCode: 'CTR-101' },
-    update: { isActive: true, userId: centerUser.id },
-    create: {
-      centerCode: 'CTR-101',
-      name: 'Apex Skills Training Institute',
-      authorizedPerson: 'Rajesh Sharma',
-      phone: '9876543210',
-      address: 'Main Commercial Complex, Sector 14',
-      isActive: true,
-      userId: centerUser.id,
-    },
-  });
-  console.log(`✓ Training Center created: ${center.name} (${center.centerCode})`);
-
-  // 3. Standard Courses Catalog
-  const webDevCourse = await prisma.course.upsert({
-    where: { id: 'course-fullstack-web' },
-    update: {},
-    create: {
-      id: 'course-fullstack-web',
-      title: 'Full Stack Web Development (MERN)',
-      description: 'Comprehensive program covering React, Node.js, Next.js, PostgreSQL, and Cloud Deployment.',
-      duration: '6 Months',
-      totalFee: 25000,
-    },
-  });
-
-  const aiMlCourse = await prisma.course.upsert({
-    where: { id: 'course-ai-data' },
-    update: {},
-    create: {
-      id: 'course-ai-data',
-      title: 'Applied AI & Data Engineering',
-      description: 'Hands-on training in Python, Machine Learning models, Prompt Engineering, and RAG architectures.',
-      duration: '6 Months',
-      totalFee: 30000,
-    },
-  });
-  console.log(`✓ Courses registered: ${webDevCourse.title}, ${aiMlCourse.title}`);
-
-  // 4. Study Notes & Reference Material
-  await prisma.note.createMany({
-    data: [
-      {
-        title: 'Module 1: React.js Architecture & State Management',
-        description: 'Complete reference slides and code patterns for Hooks, Redux, and Context API.',
-        fileUrl: 'https://example.com/materials/react-module-1.pdf',
-        courseId: webDevCourse.id,
+  await prisma.$transaction(async (tx) => {
+    // ---------------------------------------------------------------------------
+    // 2. COURSES CATALOG
+    // ---------------------------------------------------------------------------
+    const courseMern = await tx.course.upsert({
+      where: { courseCode: 'FSW-2026' },
+      create: {
+        courseCode: 'FSW-2026',
+        title: 'Full-Stack Web Development (MERN & Next.js)',
+        description: 'Comprehensive industry training in React, Next.js, Node.js, Express, PostgreSQL, and Prisma ORM.',
+        duration: '6 Months',
+        totalFee: 45000,
+        level: 'ADVANCED',
       },
-      {
-        title: 'Module 2: PostgreSQL & Prisma ORM Schema Design',
-        description: 'Relational database normalization guides and indexing best practices.',
-        fileUrl: 'https://example.com/materials/prisma-database.pdf',
-        courseId: webDevCourse.id,
+      update: {},
+    });
+
+    await tx.course.upsert({
+      where: { courseCode: 'CYB-101' },
+      create: {
+        courseCode: 'CYB-101',
+        title: 'Cybersecurity & Ethical Defense Fundamentals',
+        description: 'Hands-on network penetration testing, Linux administration, and enterprise zero-trust architectures.',
+        duration: '4 Months',
+        totalFee: 38000,
+        level: 'INTERMEDIATE',
       },
-    ],
-    skipDuplicates: true,
-  });
+      update: {},
+    });
 
-  // 5. Assignments & Tasks
-  const taskDueDate = new Date();
-  taskDueDate.setDate(taskDueDate.getDate() + 14); // 2 weeks from now
+    console.log('✅ Courses catalog provisioned.');
 
-  await prisma.task.create({
-    data: {
-      title: 'Capstone Project: Build an Auth API with JWT',
-      description: 'Implement login, register, and refresh token endpoints with secure HTTP-only cookies.',
-      dueDate: taskDueDate,
-      courseId: webDevCourse.id,
-    },
-  });
-  console.log(`✓ Notes and Tasks seeded`);
+    // ---------------------------------------------------------------------------
+    // 3. ROLE: SUPER ADMIN (HQ Operations)
+    // ---------------------------------------------------------------------------
+    const superAdminUser = await tx.user.upsert({
+      where: { email: 'admin@viqtech.in' },
+      create: {
+        email: 'admin@viqtech.in',
+        password: commonPassword,
+        role: Role.SUPER_ADMIN,
+      },
+      update: {
+        role: Role.SUPER_ADMIN,
+        ...(resetExistingPasswords ? { password: commonPassword } : {}),
+      },
+    });
 
-  // 6. Demo Student Account with Fee & EMI Plan
-  const studentUser = await prisma.user.upsert({
-    where: { email: 'student@example.com' },
-    update: {},
-    create: {
-      email: 'student@example.com',
-      password: hashedPassword,
-      role: Role.STUDENT,
-    },
-  });
+    console.log('✅ Super Admin created: admin@viqtech.in');
 
-  const student = await prisma.student.upsert({
-    where: { studentCode: 'STU-1001' },
-    update: {},
-    create: {
-      studentCode: 'STU-1001',
-      fullName: 'Aman Verma',
-      phone: '9123456780',
-      dob: new Date('2003-05-15'),
-      gender: 'Male',
-      address: 'House #42, Model Town',
-      userId: studentUser.id,
-      centerId: center.id,
-      courseId: webDevCourse.id,
-    },
-  });
+    // ---------------------------------------------------------------------------
+    // 4. ROLE: CENTER ADMIN (Branch Directorate)
+    // ---------------------------------------------------------------------------
+    const centerAdminUser = await tx.user.upsert({
+      where: { email: 'center.ludhiana@viqtech.in' },
+      create: {
+        email: 'center.ludhiana@viqtech.in',
+        password: commonPassword,
+        role: Role.CENTER_ADMIN,
+      },
+      update: {
+        role: Role.CENTER_ADMIN,
+        ...(resetExistingPasswords ? { password: commonPassword } : {}),
+      },
+    });
 
-  // EMI Fee Plan for Student
-  const feePlan = await prisma.feePlan.upsert({
-    where: { studentId: student.id },
-    update: {},
-    create: {
-      studentId: student.id,
-      type: FeeType.EMI,
-      totalAmount: 25000,
-      paidAmount: 10000,
-      balance: 15000,
-      status: PaymentStatus.PARTIAL,
-    },
-  });
+    const centerLudhiana = await tx.center.upsert({
+      where: { centerCode: 'CTR-LDH-01' },
+      create: {
+        centerCode: 'CTR-LDH-01',
+        name: 'VIQ Institute of Technology (Ludhiana Campus)',
+        authorizedPerson: 'Rajesh Sharma',
+        phone: '+91 98765 11223',
+        address: 'Plot 42, Focal Point Commercial Hub, Ludhiana, Punjab - 141010',
+        isActive: true,
+        userId: centerAdminUser.id,
+      },
+      update: {},
+    });
 
-  // Installment 1 (Paid)
-  const d1 = new Date();
-  d1.setMonth(d1.getMonth() - 1);
-  await prisma.installment.create({
-    data: {
-      feePlanId: feePlan.id,
-      dueDate: d1,
-      amount: 10000,
-      status: PaymentStatus.PAID,
-      paidAt: d1,
-    },
-  });
+    console.log('✅ Center Admin created: center.ludhiana@viqtech.in');
 
-  // Installment 2 (Overdue demo)
-  const d2 = new Date();
-  d2.setDate(d2.getDate() - 5);
-  await prisma.installment.create({
-    data: {
-      feePlanId: feePlan.id,
-      dueDate: d2,
-      amount: 7500,
-      status: PaymentStatus.PENDING,
-    },
-  });
+    // ---------------------------------------------------------------------------
+    // 5. ROLE: TEACHER (Assigned Faculty Mentor)
+    // ---------------------------------------------------------------------------
+    const teacherUser = await tx.user.upsert({
+      where: { email: 'mentor.kapoor@viqtech.in' },
+      create: {
+        email: 'mentor.kapoor@viqtech.in',
+        password: commonPassword,
+        role: Role.TEACHER,
+      },
+      update: {
+        role: Role.TEACHER,
+        ...(resetExistingPasswords ? { password: commonPassword } : {}),
+      },
+    });
 
-  // Installment 3 (Future)
-  const d3 = new Date();
-  d3.setDate(d3.getDate() + 25);
-  await prisma.installment.create({
-    data: {
-      feePlanId: feePlan.id,
-      dueDate: d3,
-      amount: 7500,
-      status: PaymentStatus.PENDING,
-    },
-  });
+    const teacherVikram = await tx.teacher.upsert({
+      where: { teacherCode: 'TCH-101' },
+      create: {
+        teacherCode: 'TCH-101',
+        fullName: 'Vikram Kapoor',
+        phone: '+91 98112 33445',
+        specialization: 'Full-Stack Architecture & Cloud APIs',
+        isActive: true,
+        userId: teacherUser.id,
+        centerId: centerLudhiana.id,
+      },
+      update: {},
+    });
 
-  // Initial Payment Voucher
-  await prisma.payment.create({
-    data: {
-      feePlanId: feePlan.id,
-      amount: 10000,
-      mode: 'ONLINE',
-      paymentDate: d1,
-    },
-  });
+    console.log('✅ Teacher created: mentor.kapoor@viqtech.in');
 
-  console.log(`✓ Demo Student & EMI Schedule seeded: Aman Verma (STU-1001)`);
-  console.log('Seeding completed successfully!');
+    // ---------------------------------------------------------------------------
+    // 6. ROLE: STUDENT 1 (Active Candidate with Partial EMI Fee Plan)
+    // ---------------------------------------------------------------------------
+    const studentUser1 = await tx.user.upsert({
+      where: { email: 'sahil.student@viqtech.in' },
+      create: {
+        email: 'sahil.student@viqtech.in',
+        password: commonPassword,
+        role: Role.STUDENT,
+      },
+      update: {
+        role: Role.STUDENT,
+        ...(resetExistingPasswords ? { password: commonPassword } : {}),
+      },
+    });
+
+    const studentSahil = await tx.student.upsert({
+      where: { studentCode: 'STU-2026-001' },
+      create: {
+        studentCode: 'STU-2026-001',
+        fullName: 'Sahil Verma',
+        phone: '+91 98721 99887',
+        dob: new Date('2004-06-15T00:00:00.000Z'),
+        gender: 'Male',
+        address: 'Hostel Block B, Room 204, Khanna, Punjab',
+        govIdNumber: 'XXXX-XXXX-4521',
+        userId: studentUser1.id,
+        centerId: centerLudhiana.id,
+        teacherId: teacherVikram.id,
+        courseId: courseMern.id,
+      },
+      update: {},
+    });
+
+    // Billing Plan for Student 1: 3-Stage EMI (Total: 45,000, Paid: 15,000, Balance: 30,000)
+    const feePlanSahil = await tx.feePlan.upsert({
+      where: { studentId: studentSahil.id },
+      create: {
+        studentId: studentSahil.id,
+        type: FeeType.EMI,
+        totalAmount: 45000,
+        paidAmount: 15000,
+        balance: 30000,
+        status: PaymentStatus.PARTIAL,
+      },
+      update: {},
+    });
+
+    // Initial Advance Payment Receipt
+    await tx.payment.upsert({
+      where: { receiptNo: 'RCP-2026-0081' },
+      create: {
+        receiptNo: 'RCP-2026-0081',
+        feePlanId: feePlanSahil.id,
+        amount: 15000,
+        mode: 'UPI',
+        paymentDate: new Date('2026-09-01T10:00:00.000Z'),
+      },
+      update: {},
+    });
+
+    // EMI Installment Milestones
+    const firstInstallment = await tx.installment.findFirst({
+      where: {
+        feePlanId: feePlanSahil.id,
+        dueDate: new Date('2026-09-01T00:00:00.000Z'),
+      },
+    });
+    if (!firstInstallment) {
+      await tx.installment.create({
+        data: {
+        feePlanId: feePlanSahil.id,
+        dueDate: new Date('2026-09-01T00:00:00.000Z'),
+        amount: 15000,
+        status: PaymentStatus.PAID,
+        paidAt: new Date('2026-09-01T10:00:00.000Z'),
+        },
+      });
+    }
+
+    const secondInstallment = await tx.installment.findFirst({
+      where: {
+        feePlanId: feePlanSahil.id,
+        dueDate: new Date('2026-11-01T00:00:00.000Z'),
+      },
+    });
+    if (!secondInstallment) {
+      await tx.installment.create({
+        data: {
+        feePlanId: feePlanSahil.id,
+        dueDate: new Date('2026-11-01T00:00:00.000Z'),
+        amount: 15000,
+        status: PaymentStatus.PENDING,
+        alert7dSent: false,
+        },
+      });
+    }
+
+    const thirdInstallment = await tx.installment.findFirst({
+      where: {
+        feePlanId: feePlanSahil.id,
+        dueDate: new Date('2026-12-01T00:00:00.000Z'),
+      },
+    });
+    if (!thirdInstallment) {
+      await tx.installment.create({
+        data: {
+        feePlanId: feePlanSahil.id,
+        dueDate: new Date('2026-12-01T00:00:00.000Z'),
+        amount: 15000,
+        status: PaymentStatus.PENDING,
+        alert7dSent: false,
+        },
+      });
+    }
+
+    // Strict Calendar Date Normalization for @db.Date field
+    const attendanceDays = ['2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22'];
+    for (const day of attendanceDays) {
+      await tx.attendance.upsert({
+        where: {
+          studentId_date: {
+            studentId: studentSahil.id,
+            date: new Date(`${day}T00:00:00.000Z`),
+          },
+        },
+        create: {
+          studentId: studentSahil.id,
+          teacherId: teacherVikram.id,
+          date: new Date(`${day}T00:00:00.000Z`),
+          status: day === '2026-10-20' ? AttendanceStatus.LATE : AttendanceStatus.PRESENT,
+        },
+        update: {},
+      });
+    }
+
+    console.log('✅ Student 1 created: sahil.student@viqtech.in (EMI Plan Active)');
+
+    // ---------------------------------------------------------------------------
+    // 7. ROLE: STUDENT 2 (Fully Cleared Lump-sum Candidate)
+    // ---------------------------------------------------------------------------
+    const studentUser2 = await tx.user.upsert({
+      where: { email: 'ananya.student@viqtech.in' },
+      create: {
+        email: 'ananya.student@viqtech.in',
+        password: commonPassword,
+        role: Role.STUDENT,
+      },
+      update: {
+        role: Role.STUDENT,
+        ...(resetExistingPasswords ? { password: commonPassword } : {}),
+      },
+    });
+
+    const studentAnanya = await tx.student.upsert({
+      where: { studentCode: 'STU-2026-002' },
+      create: {
+        studentCode: 'STU-2026-002',
+        fullName: 'Ananya Roy',
+        phone: '+91 97800 12345',
+        dob: new Date('2003-11-20T00:00:00.000Z'),
+        gender: 'Female',
+        address: 'Civil Lines, Ludhiana, Punjab',
+        govIdNumber: 'XXXX-XXXX-9912',
+        userId: studentUser2.id,
+        centerId: centerLudhiana.id,
+        teacherId: teacherVikram.id,
+        courseId: courseMern.id,
+      },
+      update: {},
+    });
+
+    const feePlanAnanya = await tx.feePlan.upsert({
+      where: { studentId: studentAnanya.id },
+      create: {
+        studentId: studentAnanya.id,
+        type: FeeType.ONE_TIME,
+        totalAmount: 45000,
+        paidAmount: 45000,
+        balance: 0,
+        status: PaymentStatus.PAID,
+      },
+      update: {},
+    });
+
+    await tx.payment.upsert({
+      where: { receiptNo: 'RCP-2026-0082' },
+      create: {
+        receiptNo: 'RCP-2026-0082',
+        feePlanId: feePlanAnanya.id,
+        amount: 45000,
+        mode: 'NET_BANKING',
+        paymentDate: new Date('2026-09-05T11:30:00.000Z'),
+      },
+      update: {},
+    });
+
+    // Certificate provisioned with ISSUED status for cleared student
+    await tx.certificate.upsert({
+      where: { certNumber: 'CERT-2026-STU-2026-002' },
+      create: {
+        certNumber: 'CERT-2026-STU-2026-002',
+        studentId: studentAnanya.id,
+        certType: 'Professional Full-Stack Accreditation',
+        status: CertificateStatus.ISSUED,
+        issueDate: new Date('2026-10-15T00:00:00.000Z'),
+        verificationUrl: '/certificate/STU-2026-002',
+      },
+      update: {},
+    });
+
+    console.log('✅ Student 2 created: ananya.student@viqtech.in (Fee Fully Cleared)');
+
+    // ---------------------------------------------------------------------------
+    // 8. COURSEWORK LAB TASKS & SUBMISSIONS
+    // ---------------------------------------------------------------------------
+    const taskData = {
+      title: 'Lab 04: Implement JWT Middleware & RBAC in Next.js',
+      description: 'Create route-level authorization guards preventing non-teacher accounts from accessing faculty endpoints. Submit your GitHub repository URL.',
+      dueDate: new Date('2026-10-30T18:00:00.000Z'),
+      courseId: courseMern.id,
+      teacherId: teacherVikram.id,
+    };
+    const existingTask = await tx.task.findFirst({
+      where: {
+        title: taskData.title,
+        courseId: courseMern.id,
+        teacherId: teacherVikram.id,
+      },
+    });
+    const task1 = existingTask
+      ? await tx.task.update({ where: { id: existingTask.id }, data: taskData })
+      : await tx.task.create({ data: taskData });
+
+    // Student 1 submits repository
+    await tx.taskSubmission.upsert({
+      where: {
+        taskId_studentId: {
+          taskId: task1.id,
+          studentId: studentSahil.id,
+        },
+      },
+      create: {
+        taskId: task1.id,
+        studentId: studentSahil.id,
+        submissionUrl: 'https://github.com/sahilraza12/lms-rbac-middleware',
+        fileUrls: ['https://storage.googleapis.com/viq-cdn/submissions/lab04-proof.pdf'],
+        remarks: 'Configured role checks using jose library and Next.js Edge Middleware.',
+        status: TaskSubmissionStatus.REVIEWED,
+        feedback: 'Clean separation of concerns. Token validation logic is robust. 9.5/10',
+        reviewedAt: new Date('2026-10-21T14:30:00.000Z'),
+      },
+      update: {},
+    });
+
+    console.log('✅ Coursework tasks and submissions seeded.');
+
+    // ---------------------------------------------------------------------------
+    // 9. MULTI-TIER OFFICIAL ANNOUNCEMENTS & RECIPIENTS
+    // ---------------------------------------------------------------------------
+    const announcementData = {
+        title: 'Academic Notice: Fall 2026 Practical Examination Timetable',
+        content: 'All regional training centers are hereby notified that the final technical evaluations will commence on November 10, 2026. Hall tickets will be downloadable via the student portal.',
+        priority: NoticePriority.IMPORTANT,
+        senderId: superAdminUser.id,
+        senderRole: Role.SUPER_ADMIN,
+        senderName: 'Central Examination Directorate',
+        targetRole: null, // Null = Global Broadcast to all roles
+        emailSent: false,
+        sentCount: 0,
+    };
+    const existingAnnouncement = await tx.announcement.findFirst({
+      where: {
+        senderId: superAdminUser.id,
+        title: announcementData.title,
+        centerId: null,
+        teacherId: null,
+      },
+    });
+    const announcementGlobal = existingAnnouncement
+      ? await tx.announcement.update({
+          where: { id: existingAnnouncement.id },
+          data: announcementData,
+        })
+      : await tx.announcement.create({ data: announcementData });
+
+    // Track read status for enrolled students
+    await tx.announcementRecipient.upsert({
+      where: {
+        announcementId_userId: {
+          announcementId: announcementGlobal.id,
+          userId: studentUser1.id,
+        },
+      },
+      create: {
+        announcementId: announcementGlobal.id,
+        userId: studentUser1.id,
+        isRead: true,
+        readAt: new Date('2026-10-21T10:00:00.000Z'),
+      },
+      update: {},
+    });
+
+    await tx.announcementRecipient.upsert({
+      where: {
+        announcementId_userId: {
+          announcementId: announcementGlobal.id,
+          userId: studentUser2.id,
+        },
+      },
+      create: {
+        announcementId: announcementGlobal.id,
+        userId: studentUser2.id,
+        isRead: false,
+      },
+      update: {},
+    });
+
+    console.log('✅ Announcements and broadcast recipients populated.');
+  },
+   { maxWait: 20000, timeout: 60000 });
+
+  console.log('🏁 Database seeding finished successfully.');
+  console.log(
+    resetExistingPasswords
+      ? 'All demo account passwords were reset from SEED_PASSWORD.'
+      : 'New demo account passwords were set from SEED_PASSWORD.',
+  );
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
+  .catch((error: unknown) => {
+    console.error('❌ Error during seeding:', error);
+    process.exitCode = 1;
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    try {
+      await prisma.$disconnect();
+    } catch (error: unknown) {
+      console.error('❌ Error disconnecting from the database:', error);
+      process.exitCode = 1;
+    }
   });

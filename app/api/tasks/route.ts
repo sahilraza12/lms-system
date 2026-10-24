@@ -1,49 +1,77 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { unstable_rethrow } from 'next/navigation';
+import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 
-// Tasks fetch karna
-export async function GET(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const courseId = searchParams.get('courseId');
-
-    const tasks = await db.task.findMany({
-      where: courseId ? { courseId } : undefined,
-      include: { course: { select: { title: true } } },
-      orderBy: { dueDate: 'asc' },
-    });
-
-    return NextResponse.json({ tasks });
-  } catch {
-    return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
-  }
-}
-
-// Admin/Center ka task assign karna
-export async function POST(req: Request) {
+export async function GET() {
   try {
     const user = await getCurrentUser();
-    if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN' && user.role !== 'CENTER')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user || user.role !== 'STUDENT') {
+      return NextResponse.json(
+        { error: 'Unauthorized: Student access only.' },
+        { status: 401 },
+      );
     }
 
-    const { title, description, dueDate, courseId } = await req.json();
-    if (!title || !dueDate || !courseId) {
-      return NextResponse.json({ error: 'Title, dueDate, and courseId are required' }, { status: 400 });
+    const student = user.studentId
+      ? await prisma.student.findUnique({
+          where: { id: user.studentId },
+          select: { id: true, teacherId: true, courseId: true },
+        })
+      : await prisma.student.findUnique({
+          where: { userId: user.userId },
+          select: { id: true, teacherId: true, courseId: true },
+        });
+
+    if (!student) {
+      return NextResponse.json(
+        { error: 'Student profile is not configured.' },
+        { status: 403 },
+      );
+    }
+    if (!student.teacherId) {
+      return NextResponse.json({
+        success: true,
+        tasks: [],
+        message: 'No mentor assigned yet.',
+      });
     }
 
-    const newTask = await db.task.create({
-      data: {
-        title,
-        description: description || '',
-        dueDate: new Date(dueDate),
-        courseId,
+    // 2. Us teacher ke saare tasks fetch karein sath hi is student ka submission status
+    const tasks = await prisma.task.findMany({
+      where: { teacherId: student.teacherId, courseId: student.courseId },
+      include: {
+        submissions: {
+          where: { studentId: student.id },
+          select: {
+            id: true,
+            submissionUrl: true,
+            fileUrls: true,
+            remarks: true,
+            submittedAt: true,
+            status: true,
+          },
+        },
       },
+      orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ message: 'Task assigned successfully', task: newTask });
-  } catch {
-    return NextResponse.json({ error: 'Failed to create task' }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      tasks: tasks.map((task) => ({
+        ...task,
+        submissions: task.submissions.map((submission) => ({
+          ...submission,
+          fileUrl: submission.submissionUrl ?? submission.fileUrls[0] ?? '',
+        })),
+      })),
+    });
+  } catch (error: unknown) {
+    unstable_rethrow(error);
+    console.error('Fetch Student Tasks Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch student tasks.' },
+      { status: 500 }
+    );
   }
 }

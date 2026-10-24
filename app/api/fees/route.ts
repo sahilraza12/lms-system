@@ -53,7 +53,7 @@ export async function POST(req: Request) {
   try {
     const user = await getCurrentUser();
 
-    if (!user || user.role !== 'CENTER') {
+    if (!user || user.role !== 'CENTER_ADMIN') {
       return NextResponse.json({ error: 'Unauthorized: Center access only' }, { status: 401 });
     }
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Clock, ArrowUpRight, Sparkles, Code2, ShieldCheck, Cpu } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 interface Course {
   id: string;
@@ -11,7 +12,7 @@ interface Course {
   duration: string;
   fee: number;
   description?: string;
-  icon?: any;
+  icon?: LucideIcon;
 }
 
 const FALLBACK_COURSES: Course[] = [

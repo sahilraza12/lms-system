@@ -20,6 +20,13 @@ export default function HeroSection() {
     setCurrentVideoIndex((prev) => (prev + 1) % videoPlaylist.length);
   };
 
+  const handleClearSessionBeforeLogin = () => {
+    localStorage.removeItem('viq-token');
+    localStorage.removeItem('viq-user');
+    sessionStorage.clear();
+    document.cookie = 'viq-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  };
+
   return (
     <section className="viq-page relative min-h-screen w-full flex flex-col justify-between overflow-hidden px-6 sm:px-12 pt-28 pb-12">
       
@@ -48,7 +55,7 @@ export default function HeroSection() {
         />
       </div>
 
-      {/* Main Clean Hero Layout (Without Telemetry Box) */}
+      {/* Main Clean Hero Layout */}
       <div className="relative z-10 max-w-7xl mx-auto w-full flex-1 flex items-center py-12">
         <div className="max-w-3xl space-y-7">
           
@@ -72,7 +79,8 @@ export default function HeroSection() {
           <div className="flex flex-wrap items-center gap-4 pt-2">
             <Link
               href="/login"
-              className="viq-btn-primary px-7 py-4 text-xs flex items-center gap-2"
+              onClick={handleClearSessionBeforeLogin}
+              className="viq-btn-primary px-7 py-4 text-xs flex items-center gap-2 transition cursor-pointer"
             >
               <span>Launch LMS Workspace</span>
               <ArrowRight className="w-4 h-4" />

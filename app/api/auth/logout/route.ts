@@ -1,17 +1,17 @@
 import { NextResponse } from 'next/server';
 
-export async function POST() {
-  const response = NextResponse.json({ message: 'Logged out successfully' });
-
-  // Token cookie ko server side se expire/delete karo
-  response.cookies.set('token', '', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
-    expires: new Date(0),
-  });
-
+function clearSession(response: NextResponse) {
+  response.cookies.delete('viq-session');
+  response.cookies.delete('token');
   return response;
+}
+
+export async function POST() {
+  return clearSession(NextResponse.json({ success: true }));
+}
+
+export async function GET(request: Request) {
+  return clearSession(
+    NextResponse.redirect(new URL('/login', request.url)),
+  );
 }

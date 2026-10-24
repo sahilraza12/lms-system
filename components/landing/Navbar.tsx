@@ -5,6 +5,13 @@ import { ShieldCheck, ArrowRight } from 'lucide-react';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 
 export default function Navbar() {
+  const handleClearSessionBeforeLogin = () => {
+    localStorage.removeItem('viq-token');
+    localStorage.removeItem('viq-user');
+    sessionStorage.clear();
+    document.cookie = 'viq-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  };
+
   return (
     <header className="fixed top-4 inset-x-0 z-50 px-4 sm:px-8">
       <div className="max-w-7xl mx-auto viq-nav rounded-2xl px-5 py-3.5 flex items-center justify-between">
@@ -45,7 +52,8 @@ export default function Navbar() {
 
           <Link
             href="/login"
-            className="viq-btn-primary px-5 py-2.5 text-xs flex items-center gap-1.5"
+            onClick={handleClearSessionBeforeLogin}
+            className="viq-btn-primary px-5 py-2.5 text-xs flex items-center gap-1.5 transition cursor-pointer"
           >
             <span>Portal Login</span>
             <ArrowRight className="w-3.5 h-3.5" />

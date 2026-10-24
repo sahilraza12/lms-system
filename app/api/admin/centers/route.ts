@@ -1,94 +1,157 @@
 import { NextResponse } from 'next/server';
+import { Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-// 1. Fetch all centers
+function isAdmin(role: string) {
+  return role === Role.SUPER_ADMIN || role === Role.ADMIN;
+}
+
+// 1. Fetch All Centers with aggregate metrics
 export async function GET() {
   try {
     const user = await getCurrentUser();
-    if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN')) {
+    if (!user || !isAdmin(user.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const centers = await db.center.findMany({
       include: {
-        user: {
-          select: { email: true },
-        },
+        user: { select: { email: true } },
         _count: {
-          select: { students: true },
+          select: {
+            teachers: true,
+            students: true,
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ centers });
-  } catch (error) {
-    console.error('Fetch centers error:', error);
-    return NextResponse.json({ error: 'Failed to fetch centers' }, { status: 500 });
+    return NextResponse.json({ success: true, centers });
+  } catch (error: unknown) {
+    console.error('Fetch Centers Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch centers.' },
+      { status: 500 }
+    );
   }
 }
 
-// 2. Create new center with login credentials
+// 2. Create New Training Center & Branch Head User
 export async function POST(req: Request) {
   try {
     const user = await getCurrentUser();
-    if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN')) {
+    if (!user || !isAdmin(user.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await req.json();
-    const { name, centerCode, email, password, authorizedPerson, phone, address } = body;
-
-    if (!name || !centerCode || !email || !password || !authorizedPerson || !phone) {
+    const body: unknown = await req.json();
+    if (!body || typeof body !== 'object') {
       return NextResponse.json(
-        { error: 'All essential fields are required' },
+        { error: 'Invalid request body.' },
         { status: 400 }
       );
     }
 
-    // Check if email or center code already exists
-    const existingUser = await db.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return NextResponse.json({ error: 'Email already registered' }, { status: 400 });
+    const input = body as Record<string, unknown>;
+    const name = typeof input.name === 'string' ? input.name.trim() : '';
+    const centerCode =
+      typeof input.centerCode === 'string'
+        ? input.centerCode.trim().toUpperCase()
+        : '';
+    const email =
+      typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
+    const password = typeof input.password === 'string' ? input.password : '';
+    const address = typeof input.address === 'string' ? input.address.trim() : '';
+    const phone = typeof input.phone === 'string' ? input.phone.trim() : '';
+    const authorizedPerson =
+      typeof input.authorizedPerson === 'string'
+        ? input.authorizedPerson.trim()
+        : '';
+
+    if (!name || !centerCode || !email || !password) {
+      return NextResponse.json(
+        { error: 'Name, center code, email, and password are required.' },
+        { status: 400 }
+      );
+    }
+    if (name.length > 120 || centerCode.length > 40 || email.length > 254) {
+      return NextResponse.json(
+        { error: 'One or more fields exceed the maximum allowed length.' },
+        { status: 400 }
+      );
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
+    }
+    if (password.length < 8) {
+      return NextResponse.json(
+        { error: 'Password must be at least 8 characters long.' },
+        { status: 400 }
+      );
     }
 
-    const existingCode = await db.center.findUnique({ where: { centerCode } });
-    if (existingCode) {
-      return NextResponse.json({ error: 'Center code already exists' }, { status: 400 });
+    if (phone.length > 40 || authorizedPerson.length > 120 || address.length > 500) {
+      return NextResponse.json(
+        { error: 'One or more fields exceed the maximum allowed length.' },
+        { status: 400 }
+      );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user and center in a transaction
-    const newCenter = await db.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        role: 'CENTER',
-        center: {
-          create: {
-            name,
-            centerCode,
-            authorizedPerson,
-            phone,
-            address: address || '',
-            isActive: true,
-          },
+    const result = await db.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          role: Role.CENTER_ADMIN,
         },
-      },
-      include: {
-        center: true,
-      },
+      });
+
+      const center = await tx.center.create({
+        data: {
+          name,
+          centerCode,
+          authorizedPerson: authorizedPerson || name,
+          phone: phone || 'Not Provided',
+          address: address || 'Address not specified',
+          userId: user.id,
+        },
+      });
+
+      return { user, center };
     });
 
     return NextResponse.json({
-      message: 'Center created successfully',
-      center: newCenter.center,
+      success: true,
+      message: 'Training center onboarded successfully.',
+      center: result.center,
     });
-  } catch (error) {
-    console.error('Create center error:', error);
-    return NextResponse.json({ error: 'Failed to create center' }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Create Center Error:', error);
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2002'
+    ) {
+      return NextResponse.json(
+        { error: 'A user with this email or center code already exists.' },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof SyntaxError
+            ? 'Invalid request body.'
+            : 'Failed to create training center.',
+      },
+      { status: error instanceof SyntaxError ? 400 : 500 }
+    );
   }
 }

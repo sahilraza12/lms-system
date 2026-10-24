@@ -1,21 +1,26 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
 
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ receiptId: string }> }
 ) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { receiptId } = await params;
+
+    if (!receiptId) {
+      return NextResponse.json({ error: 'Receipt voucher ID is required.' }, { status: 400 });
     }
 
-    const { id: paymentId } = await params;
-
-    const payment = await db.payment.findUnique({
-      where: { id: paymentId },
+    // 1. Search by exact Payment receiptNo OR Student Roll Code
+    const payment = await db.payment.findFirst({
+      where: {
+        OR: [
+          { receiptNo: receiptId },
+          { id: receiptId },
+          { feePlan: { student: { studentCode: receiptId } } },
+        ],
+      },
       include: {
         feePlan: {
           include: {
@@ -23,6 +28,17 @@ export async function GET(
               include: {
                 course: true,
                 center: true,
+                user: { select: { email: true } },
+              },
+            },
+            payments: {
+              orderBy: { paymentDate: 'asc' },
+              select: {
+                id: true,
+                receiptNo: true,
+                amount: true,
+                mode: true,
+                paymentDate: true,
               },
             },
           },
@@ -31,12 +47,18 @@ export async function GET(
     });
 
     if (!payment) {
-      return NextResponse.json({ error: 'Receipt not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Fee payment receipt not found.' }, { status: 404 });
     }
 
-    return NextResponse.json({ payment });
-  } catch (error) {
-    console.error('Fetch receipt error:', error);
-    return NextResponse.json({ error: 'Failed to fetch receipt data' }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      payment,
+    });
+  } catch (error: unknown) {
+    console.error('Fetch Receipt Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to generate receipt voucher.' },
+      { status: 500 }
+    );
   }
 }
