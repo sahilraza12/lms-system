@@ -5,25 +5,30 @@ import { getCurrentUser } from '@/lib/auth';
 export async function GET() {
   try {
     const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized: Student login required.' }, { status: 401 });
+    if (!user || user.role?.toUpperCase() !== 'STUDENT') {
+      return NextResponse.json(
+        { error: 'Unauthorized: Student login required.' },
+        { status: 401 }
+      );
     }
 
     const currentUserId = (user as any)?.id || (user as any)?.userId;
     const currentUserEmail = (user as any)?.email;
+    const currentStudentCode = (user as any)?.studentCode || (user as any)?.identifier;
 
-    // Student account resolve karein (userId ya email ke through)
+    // Resolve student record via userId, id, email, or studentCode
     const student = await db.student.findFirst({
       where: {
         OR: [
           ...(currentUserId ? [{ userId: currentUserId }, { id: currentUserId }] : []),
           ...(currentUserEmail ? [{ user: { email: currentUserEmail } }] : []),
+          ...(currentStudentCode ? [{ studentCode: currentStudentCode }] : []),
         ],
       },
       include: {
-        user: { select: { id: true, name: true, email: true } },
-        course: { select: { id: true, title: true, totalFee: true } },
-        center: { select: { id: true, name: true, centerCode: true, phone: true } },
+        user: { select: { id: true, email: true } },
+        course: { select: { id: true, title: true, totalFee: true, duration: true } },
+        center: { select: { id: true, name: true, centerCode: true, phone: true, address: true } },
         feePlan: {
           include: {
             payments: {
@@ -50,26 +55,47 @@ export async function GET() {
     const balance = Number(feePlan?.balance || Math.max(0, totalAmount - paidAmount));
     const status = feePlan?.status || (balance === 0 && totalAmount > 0 ? 'PAID' : 'PENDING');
 
-    // Invoices list with direct download link references
-    const invoices = (feePlan?.payments || []).map((pay) => ({
-      paymentId: pay.id,
-      receiptNo: pay.receiptNo,
-      amount: Number(pay.amount),
-      paymentMode: pay.mode,
-      date: new Date(pay.paymentDate).toLocaleDateString('en-IN', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      }),
-      downloadUrl: `/receipt/${pay.id}`,
-    }));
+    const centerName = student.center?.name || 'VIQ Authorized Study Directorate';
+    const centerCode = student.center?.centerCode || 'CTR-001';
+    const centerAddress = student.center?.address || 'Authorized Study Campus';
+    const courseTitle = student.course?.title || 'Technical Engineering Track';
+    const courseDuration = student.course?.duration || '6 Months';
 
-    // Installment schedule
+    // Invoices list mapped for voucher canvas and table rendering
+    const invoices = (feePlan?.payments || []).map((pay) => {
+      const receiptIdentifier = pay.receiptNo || pay.id;
+      return {
+        id: pay.id,
+        paymentId: pay.id,
+        receiptNo: pay.receiptNo || pay.id,
+        amount: Number(pay.amount),
+        mode: pay.mode,
+        paymentMode: pay.mode,
+        paymentDate: pay.paymentDate,
+        transactionRef: (pay as any).transactionRef || '',
+        date: new Date(pay.paymentDate).toLocaleDateString('en-IN', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        }),
+        downloadUrl: `/receipt/${receiptIdentifier}?from=student`,
+        receiptUrl: `/receipt/${receiptIdentifier}?from=student`,
+        // Voucher canvas metadata fallback
+        centerName,
+        centerCode,
+        address: centerAddress,
+        courseTitle,
+        duration: courseDuration,
+      };
+    });
+
+    // Installments schedule with overdue calculation
     const installments = (feePlan?.installments || []).map((inst) => {
       const dueDateObj = new Date(inst.dueDate);
       const isOverdue = inst.status === 'PENDING' && dueDateObj < new Date();
 
       return {
+        id: inst.id,
         installmentId: inst.id,
         amount: Number(inst.amount),
         dueDate: dueDateObj.toLocaleDateString('en-IN', {
@@ -92,8 +118,11 @@ export async function GET() {
         phone: student.phone,
       },
       courseDetails: {
-        title: student.course?.title || 'Registered Course',
-        centerName: student.center?.name || 'Khanna Branch Node',
+        title: courseTitle,
+        duration: courseDuration,
+        centerName,
+        centerCode,
+        address: centerAddress,
       },
       billingSummary: {
         feeType: feePlan?.type || 'ONE_TIME',
@@ -101,9 +130,17 @@ export async function GET() {
         paidAmount,
         balance,
         status,
-        clearancePercentage: totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 100,
+        clearancePercentage:
+          totalAmount > 0 ? Math.min(100, Math.round((paidAmount / totalAmount) * 100)) : 100,
+      },
+      feePlan: {
+        totalAmount,
+        paidAmount,
+        balance,
+        status,
       },
       invoices,
+      payments: invoices,
       installments,
     });
   } catch (error: unknown) {

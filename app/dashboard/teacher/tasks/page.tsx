@@ -21,12 +21,15 @@ import {
   Sparkles,
   Inbox,
   UserCheck,
-  Code2
+  Code2,
+  Trash2
 } from 'lucide-react';
+import ThemeToggle from '@/components/theme/ThemeToggle';
 
 interface SubmissionItem {
   id: string;
-  fileUrl: string;
+  submissionUrl?: string;
+  fileUrl?: string;
   remarks: string | null;
   submittedAt: string;
   status: 'PENDING' | 'SUBMITTED' | 'REVIEWED';
@@ -53,6 +56,7 @@ export default function TeacherTasksPage() {
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Modal 1: Create Task Form State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -78,6 +82,8 @@ export default function TeacherTasksPage() {
           setSelectedTask((prev) => 
             prev ? data.tasks.find((t: TaskItem) => t.id === prev.id) || data.tasks[0] : data.tasks[0]
           );
+        } else {
+          setSelectedTask(null);
         }
       }
     } catch (err) {
@@ -109,6 +115,33 @@ export default function TeacherTasksPage() {
     void loadInitialTasks();
     return () => controller.abort();
   }, []);
+
+  const handleDeleteTask = async (taskId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const confirmed = window.confirm(
+      'Are you sure you want to permanently delete this task and all its submissions?'
+    );
+    if (!confirmed) return;
+
+    setDeletingId(taskId);
+    try {
+      const res = await fetch(`/api/teacher/tasks?id=${encodeURIComponent(taskId)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete task.');
+
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      if (selectedTask?.id === taskId) {
+        const remaining = tasks.filter((t) => t.id !== taskId);
+        setSelectedTask(remaining.length > 0 ? remaining[0] : null);
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error deleting task.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,10 +224,10 @@ export default function TeacherTasksPage() {
   const pendingSubmissions = totalSubmissions - reviewedSubmissions;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-orange-500 selection:text-white">
+    <div className="teacher-portal-theme min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-orange-500 selection:text-white">
       
-      {/* 1. Integrated Global Top Navigation */}
-      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md px-4 sm:px-8 py-3.5">
+      {/* 1. Global Navigation */}
+      <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-4 sm:px-8 py-3.5">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center font-black text-white text-base shadow-lg shadow-orange-500/20">
@@ -212,9 +245,10 @@ export default function TeacherTasksPage() {
           </div>
 
           <div className="flex items-center gap-2.5 sm:gap-3">
+            <ThemeToggle />
             <Link
               href="/dashboard/teacher"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/50 transition shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold border border-slate-700 transition"
             >
               <UserCheck className="w-3.5 h-3.5 text-slate-400" />
               <span className="hidden sm:inline">&larr; Attendance Register</span>
@@ -224,7 +258,7 @@ export default function TeacherTasksPage() {
             <button
               type="button"
               onClick={() => setIsCreateModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-xs font-bold transition shadow-md shadow-orange-600/25 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition shadow-md shadow-orange-600/20 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 stroke-[3]" />
               <span>Assign New Task</span>
@@ -249,23 +283,23 @@ export default function TeacherTasksPage() {
       <main className="max-w-7xl mx-auto p-4 sm:p-8 space-y-6">
         
         {/* Banner Section */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 pb-2 border-b border-slate-800/60">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 pb-2 border-b border-slate-800/80">
           <div>
             <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
               <span>Coursework Tasks & Lab Review Desk</span>
               <Sparkles className="w-5 h-5 text-amber-400" />
             </h1>
-            <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+            <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
               Publish technical milestones, inspect student GitHub repositories, and deliver mentor code review evaluations.
             </p>
           </div>
         </div>
 
-        {/* 3. High-Contrast Dark KPI Cards */}
+        {/* 3. High-Contrast KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 relative overflow-hidden backdrop-blur-xs shadow-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xs">
             <div className="flex justify-between items-start text-slate-400">
-              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400">Published Labs</span>
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-300">Published Labs</span>
               <div className="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-400 flex items-center justify-center">
                 <BookOpen className="w-4 h-4" />
               </div>
@@ -274,26 +308,26 @@ export default function TeacherTasksPage() {
             <span className="text-[11px] text-slate-400 mt-1 inline-block">Active assignment specifications</span>
           </div>
 
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 relative overflow-hidden backdrop-blur-xs shadow-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xs">
             <div className="flex justify-between items-start text-slate-400">
-              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-amber-400/90">Pending Review</span>
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-amber-400">Pending Review</span>
               <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
                 <Clock className="w-4 h-4" />
               </div>
             </div>
             <p className="text-3xl font-black text-amber-400 mt-2 font-mono tracking-tight">{pendingSubmissions}</p>
-            <span className="text-[11px] text-amber-400/70 mt-1 inline-block">Submissions awaiting grading</span>
+            <span className="text-[11px] text-slate-400 mt-1 inline-block">Submissions awaiting grading</span>
           </div>
 
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 relative overflow-hidden backdrop-blur-xs shadow-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xs">
             <div className="flex justify-between items-start text-slate-400">
-              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-emerald-400/90">Reviewed & Evaluated</span>
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-emerald-400">Reviewed & Evaluated</span>
               <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
                 <CheckCircle2 className="w-4 h-4" />
               </div>
             </div>
             <p className="text-3xl font-black text-emerald-400 mt-2 font-mono tracking-tight">{reviewedSubmissions}</p>
-            <span className="text-[11px] text-emerald-400/70 mt-1 inline-block">Feedback returned to candidates</span>
+            <span className="text-[11px] text-slate-400 mt-1 inline-block">Feedback returned to candidates</span>
           </div>
         </div>
 
@@ -301,13 +335,13 @@ export default function TeacherTasksPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
           {/* Left Column: Assigned Lab Tasks (5 Cols) */}
-          <div className="lg:col-span-5 bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-3 backdrop-blur-xs">
-            <div className="flex justify-between items-center px-2 pb-2 border-b border-slate-800/80">
-              <h2 className="text-xs font-bold text-slate-200 flex items-center gap-2">
+          <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+            <div className="flex justify-between items-center px-2 pb-2 border-b border-slate-800">
+              <h2 className="text-xs font-bold text-slate-100 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-orange-500" />
                 <span>Assigned Lab Tasks</span>
               </h2>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 font-bold">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 font-bold">
                 {tasks.length} Total
               </span>
             </div>
@@ -318,29 +352,29 @@ export default function TeacherTasksPage() {
                 <p>Loading coursework...</p>
               </div>
             ) : tasks.length === 0 ? (
-              <div className="py-12 px-4 text-center text-xs text-slate-500 space-y-2 border border-dashed border-slate-800 rounded-xl">
-                <Inbox className="w-6 h-6 mx-auto text-slate-600" />
+              <div className="py-12 px-4 text-center text-xs text-slate-400 space-y-2 border border-dashed border-slate-800 rounded-xl">
+                <Inbox className="w-6 h-6 mx-auto text-slate-500" />
                 <p>No tasks assigned yet. Click &ldquo;+ Assign New Task&rdquo; to set a milestone.</p>
               </div>
             ) : (
               <div className="space-y-2.5 max-h-[620px] overflow-y-auto pr-1">
                 {tasks.map((task) => {
                   const isSelected = selectedTask?.id === task.id;
+                  const isDeleting = deletingId === task.id;
                   const pendingCount = task.submissions?.filter((s) => s.status !== 'REVIEWED').length || 0;
 
                   return (
-                    <button
-                      type="button"
+                    <div
                       key={task.id}
                       onClick={() => setSelectedTask(task)}
                       className={`w-full text-left p-4 rounded-xl border transition-all cursor-pointer relative ${
                         isSelected
-                          ? 'bg-orange-500/10 border-orange-500/80 text-white shadow-lg shadow-orange-950/30'
-                          : 'bg-slate-800/30 border-slate-800 hover:bg-slate-800/60 text-slate-300 hover:border-slate-700'
+                          ? 'bg-orange-500/10 border-orange-500 text-white shadow-md'
+                          : 'bg-slate-950/60 border-slate-800 hover:bg-slate-800/50 text-slate-200 hover:border-slate-700'
                       }`}
                     >
                       <div className="flex justify-between items-start gap-2">
-                        <h3 className={`text-xs font-bold leading-snug line-clamp-2 ${isSelected ? 'text-orange-300' : 'text-slate-200'}`}>
+                        <h3 className={`text-xs font-bold leading-snug line-clamp-2 ${isSelected ? 'text-orange-400' : 'text-white'}`}>
                           {task.title}
                         </h3>
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -349,20 +383,36 @@ export default function TeacherTasksPage() {
                               {pendingCount} DUE
                             </span>
                           )}
-                          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isSelected ? 'text-orange-400 translate-x-0.5' : 'text-slate-600'}`} />
+
+                          {/* Task Inline Delete Button */}
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteTask(task.id, e)}
+                            disabled={isDeleting}
+                            className="p-1 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer"
+                            title="Delete this assignment"
+                          >
+                            {isDeleting ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
+                          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isSelected ? 'text-orange-400 translate-x-0.5' : 'text-slate-500'}`} />
                         </div>
                       </div>
 
                       <div className="mt-3 flex justify-between items-center text-[10px] text-slate-400 font-mono">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-800/80 text-slate-300 font-semibold">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 font-semibold">
                           {task.submissions?.length || 0} Submissions
                         </span>
                         <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3 text-slate-500" />
+                          <Calendar className="w-3 h-3 text-slate-400" />
                           {task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Rolling'}
                         </span>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -370,33 +420,47 @@ export default function TeacherTasksPage() {
           </div>
 
           {/* Right Column: Lab Specification & Submissions Board (7 Cols) */}
-          <div className="lg:col-span-7 bg-slate-900/60 border border-slate-800 rounded-2xl p-6 space-y-6 backdrop-blur-xs">
+          <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
             {selectedTask ? (
               <>
                 {/* Lab Details Header */}
-                <div className="border-b border-slate-800/80 pb-5 space-y-3">
+                <div className="border-b border-slate-800 pb-5 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[10px] font-mono uppercase tracking-widest text-orange-400 font-bold bg-orange-500/10 px-2.5 py-1 rounded-md border border-orange-500/20">
                       LAB DETAILS
                     </span>
-                    <span className="text-xs text-slate-400 flex items-center gap-1.5 font-mono">
-                      <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                      Due Date: <span className="text-slate-200 font-semibold">{selectedTask.dueDate ? new Date(selectedTask.dueDate).toLocaleDateString('en-IN') : 'No Deadline'}</span>
+                    <span className="text-xs text-slate-300 flex items-center gap-1.5 font-mono">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                      Due Date: <span className="text-white font-semibold">{selectedTask.dueDate ? new Date(selectedTask.dueDate).toLocaleDateString('en-IN') : 'No Deadline'}</span>
                     </span>
                   </div>
 
-                  <div>
+                  <div className="flex items-start justify-between gap-4">
                     <h2 className="text-lg font-bold text-white tracking-tight leading-snug">{selectedTask.title}</h2>
-                    <p className="text-xs text-slate-400 mt-2.5 leading-relaxed bg-slate-950/40 p-3.5 rounded-xl border border-slate-800/70">
-                      {selectedTask.description || 'No detailed instructions provided for this assignment.'}
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTask(selectedTask.id)}
+                      disabled={deletingId === selectedTask.id}
+                      className="px-3 py-1.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      {deletingId === selectedTask.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                      <span>Delete Task</span>
+                    </button>
                   </div>
+
+                  <p className="text-xs text-slate-200 mt-2.5 leading-relaxed bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                    {selectedTask.description || 'No detailed instructions provided for this assignment.'}
+                  </p>
                 </div>
 
                 {/* Candidate Submissions Queue */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                    <h3 className="text-xs font-bold text-white flex items-center gap-2">
                       <Code2 className="w-4 h-4 text-orange-400" />
                       <span>Candidate Submissions</span>
                     </h3>
@@ -406,10 +470,10 @@ export default function TeacherTasksPage() {
                   </div>
 
                   {!selectedTask.submissions || selectedTask.submissions.length === 0 ? (
-                    <div className="p-12 rounded-2xl bg-slate-950/40 border border-dashed border-slate-800 text-center space-y-2">
-                      <Inbox className="w-8 h-8 mx-auto text-slate-600" />
-                      <p className="text-xs font-semibold text-slate-300">No submissions received yet</p>
-                      <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                    <div className="p-12 rounded-2xl bg-slate-950 border border-dashed border-slate-800 text-center space-y-2">
+                      <Inbox className="w-8 h-8 mx-auto text-slate-500" />
+                      <p className="text-xs font-semibold text-slate-200">No submissions received yet</p>
+                      <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
                         Candidates have not pushed their repository commits for this task yet.
                       </p>
                     </div>
@@ -417,15 +481,16 @@ export default function TeacherTasksPage() {
                     <div className="space-y-3">
                       {selectedTask.submissions.map((sub) => {
                         const isReviewed = sub.status === 'REVIEWED';
+                        const projectLink = sub.submissionUrl || sub.fileUrl;
 
                         return (
                           <div
                             key={sub.id}
-                            className="p-4 rounded-xl border border-slate-800 bg-slate-850 hover:border-slate-700/80 transition space-y-3 bg-slate-900/40"
+                            className="p-4 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-slate-700 transition space-y-3"
                           >
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                               <div>
-                                <span className="font-bold text-slate-100 text-xs block">
+                                <span className="font-bold text-white text-xs block">
                                   {sub.student.fullName}
                                 </span>
                                 <span className="text-[10px] font-mono text-orange-400 block mt-0.5">
@@ -446,10 +511,10 @@ export default function TeacherTasksPage() {
                             </div>
 
                             {/* Links & Student Remarks */}
-                            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs space-y-2">
-                              {sub.fileUrl && (
+                            <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
+                              {projectLink ? (
                                 <a
-                                  href={sub.fileUrl}
+                                  href={projectLink}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-1.5 text-orange-400 hover:text-orange-300 font-mono font-bold text-xs truncate max-w-full hover:underline"
@@ -458,17 +523,19 @@ export default function TeacherTasksPage() {
                                   <span className="truncate">Inspect Repository / Demo Link</span>
                                   <ExternalLink className="w-3 h-3 shrink-0" />
                                 </a>
+                              ) : (
+                                <span className="text-[11px] text-slate-500 font-mono italic">No URL provided</span>
                               )}
 
                               {sub.remarks && (
-                                <p className="text-[11px] text-slate-400 italic">
+                                <p className="text-[11px] text-slate-300 italic">
                                   &ldquo;{sub.remarks}&rdquo;
                                 </p>
                               )}
                             </div>
 
                             {/* Action Footer */}
-                            <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono pt-1">
+                            <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono pt-1">
                               <span>Submitted: {new Date(sub.submittedAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                               <button
                                 type="button"
@@ -491,8 +558,8 @@ export default function TeacherTasksPage() {
                 </div>
               </>
             ) : (
-              <div className="py-24 text-center text-slate-500 text-xs space-y-2">
-                <FileText className="w-8 h-8 mx-auto text-slate-700" />
+              <div className="py-24 text-center text-slate-400 text-xs space-y-2">
+                <FileText className="w-8 h-8 mx-auto text-slate-600" />
                 <p>Select an assignment on the left to review candidate submissions.</p>
               </div>
             )}
@@ -503,7 +570,7 @@ export default function TeacherTasksPage() {
 
       {/* Modal 1: Assign New Task */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-slate-900 max-w-lg w-full rounded-2xl shadow-2xl border border-slate-800 overflow-hidden my-8 text-slate-100">
             <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex justify-between items-center">
               <div>
@@ -527,7 +594,7 @@ export default function TeacherTasksPage() {
 
             <form onSubmit={handleCreateTask} className="p-6 space-y-4 text-xs">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
+                <label className="block text-slate-200 font-semibold mb-1">
                   Assignment Title *
                 </label>
                 <input
@@ -536,12 +603,12 @@ export default function TeacherTasksPage() {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Build JWT Role-Based Auth Middleware"
-                  className="w-full px-3 py-2 bg-slate-950 border rounded-xl border-slate-700/80 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none text-xs text-white"
+                  className="w-full px-3 py-2 bg-slate-950 border rounded-xl border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none text-xs text-white"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
+                <label className="block text-slate-200 font-semibold mb-1">
                   Submission Deadline *
                 </label>
                 <input
@@ -549,12 +616,12 @@ export default function TeacherTasksPage() {
                   required
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border rounded-xl border-slate-700/80 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none text-xs font-mono text-white [color-scheme:dark]"
+                  className="w-full px-3 py-2 bg-slate-950 border rounded-xl border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none text-xs font-mono text-white [color-scheme:dark]"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
+                <label className="block text-slate-200 font-semibold mb-1">
                   Deliverable Instructions & Acceptance Criteria
                 </label>
                 <textarea
@@ -562,7 +629,7 @@ export default function TeacherTasksPage() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Specify expected repository structure, required routes, or test suites..."
-                  className="w-full px-3 py-2 bg-slate-950 border rounded-xl border-slate-700/80 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none text-xs resize-none text-white"
+                  className="w-full px-3 py-2 bg-slate-950 border rounded-xl border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none text-xs resize-none text-white"
                 />
               </div>
 
@@ -570,14 +637,14 @@ export default function TeacherTasksPage() {
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-400 hover:bg-slate-800 font-semibold cursor-pointer transition"
+                  className="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 font-semibold cursor-pointer transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
-                  className="px-5 py-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold rounded-xl flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer shadow-md shadow-orange-600/20"
+                  className="px-5 py-2 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer shadow-md shadow-orange-600/20"
                 >
                   {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   <span>{creating ? 'Broadcasting...' : 'Publish Task'}</span>
@@ -590,7 +657,7 @@ export default function TeacherTasksPage() {
 
       {/* Modal 2: Grade & Evaluation Feedback */}
       {reviewingSubmission && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-slate-900 max-w-lg w-full rounded-2xl shadow-2xl border border-slate-800 overflow-hidden my-8 text-slate-100">
             <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex justify-between items-center">
               <div>
@@ -616,22 +683,26 @@ export default function TeacherTasksPage() {
 
             <form onSubmit={handleGradeSubmission} className="p-6 space-y-4 text-xs">
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
-                <span className="text-[10px] font-mono uppercase font-bold text-slate-500 block">
+                <span className="text-[10px] font-mono uppercase font-bold text-slate-400 block">
                   Candidate Repository URL:
                 </span>
-                <a
-                  href={reviewingSubmission.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-orange-400 font-mono font-bold text-xs flex items-center gap-1.5 hover:underline truncate"
-                >
-                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{reviewingSubmission.fileUrl}</span>
-                </a>
+                {reviewingSubmission.submissionUrl || reviewingSubmission.fileUrl ? (
+                  <a
+                    href={reviewingSubmission.submissionUrl || reviewingSubmission.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-orange-400 font-mono font-bold text-xs flex items-center gap-1.5 hover:underline truncate"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{reviewingSubmission.submissionUrl || reviewingSubmission.fileUrl}</span>
+                  </a>
+                ) : (
+                  <span className="text-slate-500 italic">No link provided</span>
+                )}
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
+                <label className="block text-slate-200 font-semibold mb-1">
                   Mentor Code Review Remarks & Feedback *
                 </label>
                 <textarea
@@ -640,7 +711,7 @@ export default function TeacherTasksPage() {
                   value={mentorFeedback}
                   onChange={(e) => setMentorFeedback(e.target.value)}
                   placeholder="Review findings: code architecture, error handling, edge cases, improvement areas..."
-                  className="w-full px-3 py-2 bg-slate-950 border rounded-xl border-slate-700/80 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none text-xs resize-none text-white"
+                  className="w-full px-3 py-2 bg-slate-950 border rounded-xl border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none text-xs resize-none text-white"
                 />
               </div>
 
@@ -648,7 +719,7 @@ export default function TeacherTasksPage() {
                 <button
                   type="button"
                   onClick={() => setReviewingSubmission(null)}
-                  className="px-4 py-2 rounded-xl text-slate-400 hover:bg-slate-800 font-semibold cursor-pointer transition"
+                  className="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 font-semibold cursor-pointer transition"
                 >
                   Cancel
                 </button>

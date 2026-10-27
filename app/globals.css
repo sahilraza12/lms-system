@@ -138,3 +138,119 @@ body {
     linear-gradient(to right, var(--border-color) 1px, transparent 1px),
     linear-gradient(to bottom, var(--border-color) 1px, transparent 1px);
 }
+
+html:not(.dark) .student-portal-theme {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+html:not(.dark) .student-portal-theme [class*="bg-[#"] {
+  background-color: var(--bg-secondary) !important;
+}
+
+html:not(.dark) .student-portal-theme [class*="bg-white/"] {
+  background-color: var(--bg-glass-subtle) !important;
+}
+
+html:not(.dark) .student-portal-theme [class*="border-white"] {
+  border-color: var(--border-color) !important;
+}
+
+html:not(.dark) .student-portal-theme [class*="text-slate-100"],
+html:not(.dark) .student-portal-theme [class*="text-slate-200"],
+html:not(.dark) .student-portal-theme [class*="text-slate-300"],
+html:not(.dark) .student-portal-theme [class*="text-white"] {
+  color: var(--text-primary) !important;
+}
+
+html:not(.dark) .student-portal-theme [class*="text-slate-400"],
+html:not(.dark) .student-portal-theme [class*="text-slate-500"],
+html:not(.dark) .student-portal-theme [class*="text-slate-600"] {
+  color: var(--text-muted) !important;
+}
+
+html:not(.dark) .teacher-portal-theme {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="bg-slate-950"] {
+  background-color: #f1f5f9 !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="bg-slate-900"] {
+  background-color: #ffffff !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="bg-slate-800"] {
+  background-color: #e2e8f0 !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="bg-slate-700"] {
+  background-color: #cbd5e1 !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="border-slate-800"] {
+  border-color: #e2e8f0 !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="border-slate-700"] {
+  border-color: #cbd5e1 !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="divide-slate-800"] {
+  border-color: #e2e8f0 !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="text-white"],
+html:not(.dark) .teacher-portal-theme [class*="text-slate-100"],
+html:not(.dark) .teacher-portal-theme [class*="text-slate-200"] {
+  color: #0f172a !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="text-slate-300"] {
+  color: #334155 !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="text-slate-400"] {
+  color: #475569 !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="text-slate-500"] {
+  color: #64748b !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="text-slate-600"] {
+  color: #475569 !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="text-white"][class*="bg-orange-600"],
+html:not(.dark) .teacher-portal-theme [class*="text-white"][class*="bg-emerald-600"],
+html:not(.dark) .teacher-portal-theme [class*="text-white"][class*="bg-amber-500"],
+html:not(.dark) .teacher-portal-theme [class*="text-white"][class*="bg-red-600"] {
+  color: #ffffff !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="bg-gradient-to-tr"][class*="text-white"] {
+  color: #ffffff !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="hover:bg-slate-850"]:hover {
+  background-color: #f1f5f9 !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="hover:bg-slate-900"]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="hover:bg-slate-800"]:hover {
+  background-color: #cbd5e1 !important;
+}
+
+html:not(.dark) .teacher-portal-theme [class*="hover:bg-slate-700"]:hover {
+  background-color: #cbd5e1 !important;
+}
+
+html:not(.dark) .teacher-portal-theme input[type="date"] {
+  color-scheme: light;
+}

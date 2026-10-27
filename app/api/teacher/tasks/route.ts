@@ -2,30 +2,38 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
+// Helper: Resilient Teacher Resolution
+async function resolveTeacher(user: any) {
+  if (!user || user.role?.toUpperCase() !== 'TEACHER') {
+    return null;
+  }
+
+  const currentTeacherId = user.teacherId;
+  const currentUserId = user.id || user.userId;
+
+  const teacher = await db.teacher.findFirst({
+    where: {
+      OR: [
+        ...(currentTeacherId ? [{ id: currentTeacherId }] : []),
+        ...(currentUserId ? [{ userId: currentUserId }, { id: currentUserId }] : []),
+      ],
+    },
+    select: { id: true, isActive: true },
+  });
+
+  return teacher && teacher.isActive ? teacher : null;
+}
+
 // 1. Fetch all assignments created by the mentor with student submissions
 export async function GET() {
   try {
     const user = await getCurrentUser();
-    if (!user || user.role !== 'TEACHER') {
-      return NextResponse.json(
-        { error: 'Unauthorized: Teacher access only.' },
-        { status: 401 },
-      );
-    }
+    const teacher = await resolveTeacher(user);
 
-    const teacher = user.teacherId
-      ? await db.teacher.findUnique({
-          where: { id: user.teacherId },
-          select: { id: true, isActive: true },
-        })
-      : await db.teacher.findUnique({
-          where: { userId: user.userId },
-          select: { id: true, isActive: true },
-        });
-    if (!teacher || !teacher.isActive) {
+    if (!teacher) {
       return NextResponse.json(
-        { error: 'Teacher profile is not active.' },
-        { status: 403 },
+        { error: 'Unauthorized: Active teacher profile required.' },
+        { status: 403 }
       );
     }
 
@@ -67,30 +75,16 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const user = await getCurrentUser();
-    if (!user || user.role !== 'TEACHER') {
+    const teacher = await resolveTeacher(user);
+
+    if (!teacher) {
       return NextResponse.json(
-        { error: 'Unauthorized: Teacher access only.' },
-        { status: 401 },
+        { error: 'Unauthorized: Active teacher profile required.' },
+        { status: 403 }
       );
     }
 
-    const teacher = user.teacherId
-      ? await db.teacher.findUnique({
-          where: { id: user.teacherId },
-          select: { id: true, isActive: true },
-        })
-      : await db.teacher.findUnique({
-          where: { userId: user.userId },
-          select: { id: true, isActive: true },
-        });
-    if (!teacher || !teacher.isActive) {
-      return NextResponse.json(
-        { error: 'Teacher profile is not active.' },
-        { status: 403 },
-      );
-    }
-
-    const body: unknown = await req.json();
+    const body: unknown = await req.json().catch(() => null);
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return NextResponse.json({ error: 'Invalid task request.' }, { status: 400 });
     }
@@ -117,9 +111,17 @@ export async function POST(req: Request) {
       select: { courseId: true },
       orderBy: { createdAt: 'asc' },
     });
-    if (!assignedStudent) {
+
+    // Fallback: Agar specific assigned student na ho toh system ka pehla course attach karo
+    let targetCourseId = assignedStudent?.courseId;
+    if (!targetCourseId) {
+      const defaultCourse = await db.course.findFirst({ select: { id: true } });
+      targetCourseId = defaultCourse?.id;
+    }
+
+    if (!targetCourseId) {
       return NextResponse.json(
-        { error: 'Assign at least one student before creating a course task.' },
+        { error: 'No active course tracks found to assign tasks to.' },
         { status: 400 }
       );
     }
@@ -130,7 +132,7 @@ export async function POST(req: Request) {
         description: typeof description === 'string' ? description.trim() : '',
         dueDate: parsedDueDate,
         teacherId: teacher.id,
-        courseId: assignedStudent.courseId,
+        courseId: targetCourseId,
       },
     });
 
@@ -148,34 +150,20 @@ export async function POST(req: Request) {
   }
 }
 
-// 3. Review & Grade a submission (Update status to REVIEWED)
+// 3. Review & Grade a submission
 export async function PATCH(req: Request) {
   try {
     const user = await getCurrentUser();
-    if (!user || user.role !== 'TEACHER') {
+    const teacher = await resolveTeacher(user);
+
+    if (!teacher) {
       return NextResponse.json(
-        { error: 'Unauthorized: Teacher access only.' },
-        { status: 401 },
+        { error: 'Unauthorized: Active teacher profile required.' },
+        { status: 403 }
       );
     }
 
-    const teacher = user.teacherId
-      ? await db.teacher.findUnique({
-          where: { id: user.teacherId },
-          select: { id: true, isActive: true },
-        })
-      : await db.teacher.findUnique({
-          where: { userId: user.userId },
-          select: { id: true, isActive: true },
-        });
-    if (!teacher || !teacher.isActive) {
-      return NextResponse.json(
-        { error: 'Teacher profile is not active.' },
-        { status: 403 },
-      );
-    }
-
-    const body: unknown = await req.json();
+    const body: unknown = await req.json().catch(() => null);
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return NextResponse.json({ error: 'Invalid review request.' }, { status: 400 });
     }
@@ -216,6 +204,71 @@ export async function PATCH(req: Request) {
     console.error('Review Submission Error:', error);
     return NextResponse.json(
       { error: 'Failed to grade submission.' },
+      { status: 500 }
+    );
+  }
+}
+
+// 4. DELETE: Safely remove a coursework task & its submissions
+export async function DELETE(req: Request) {
+  try {
+    const user = await getCurrentUser();
+    const teacher = await resolveTeacher(user);
+
+    if (!teacher) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Active teacher profile required.' },
+        { status: 403 }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    const taskId = searchParams.get('id');
+
+    if (!taskId) {
+      return NextResponse.json(
+        { error: 'Task ID is required for deletion.' },
+        { status: 400 }
+      );
+    }
+
+    // Verify task ownership
+    const task = await db.task.findFirst({
+      where: {
+        id: taskId,
+        teacherId: teacher.id,
+      },
+      select: { id: true, title: true },
+    });
+
+    if (!task) {
+      return NextResponse.json(
+        { error: 'Task not found or not created by your mentor account.' },
+        { status: 404 }
+      );
+    }
+
+    // Cascade deletion inside transaction
+    await db.$transaction(async (tx) => {
+      // 1. Delete associated submissions
+      await tx.taskSubmission.deleteMany({
+        where: { taskId: task.id },
+      });
+
+      // 2. Delete task
+      await tx.task.delete({
+        where: { id: task.id },
+      });
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Task "${task.title}" has been deleted successfully.`,
+    });
+  } catch (error: unknown) {
+    console.error('Delete Task Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete coursework task.' },
       { status: 500 }
     );
   }

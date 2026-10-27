@@ -1,18 +1,31 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { Role } from '@prisma/client';
+import { NoticePriority, Role } from '@prisma/client';
+
+// Helper: Verify Admin Authorization safely
+function isAuthorizedAdmin(user: any): boolean {
+  if (!user) return false;
+  const role = user.role?.toUpperCase();
+  return role === 'ADMIN' || role === 'SUPER_ADMIN';
+}
 
 // 1. Fetch all circulars with target scope details
 export async function GET() {
   try {
     const user = await getCurrentUser();
-    if (user && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Unauthorized: Admin access only' }, { status: 403 });
+    if (!isAuthorizedAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Administrative credentials required.' },
+        { status: 403 }
+      );
     }
 
     const announcements = await db.announcement.findMany({
-      orderBy: { createdAt: 'desc' },
+      orderBy: [
+        { priority: 'desc' },
+        { createdAt: 'desc' },
+      ],
       include: {
         center: {
           select: {
@@ -31,13 +44,16 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      announcements,
+      announcements: announcements.map((item) => ({
+        ...item,
+        isPinned: item.priority === NoticePriority.URGENT,
+      })),
       centers,
     });
   } catch (error: any) {
     console.error('Fetch Announcements Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch circular broadcasts.' },
+      { error: error?.message || 'Failed to fetch circular broadcasts.' },
       { status: 500 }
     );
   }
@@ -47,42 +63,71 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const user = await getCurrentUser();
-    if (user && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Unauthorized: Admin access only' }, { status: 403 });
+    if (!isAuthorizedAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Administrative credentials required.' },
+        { status: 403 }
+      );
     }
 
-    const body = await req.json();
-    const { title, content, targetRole, centerId, isPinned } = body;
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid request payload.' }, { status: 400 });
+    }
 
-    if (!title || !content) {
+    const { title, content, targetRole, centerId, isPinned, priority } = body;
+
+    if (!title || !content || !title.trim() || !content.trim()) {
       return NextResponse.json(
         { error: 'Circular heading title and message content are required.' },
         { status: 400 }
       );
     }
 
+    // Resolve current admin user ID safely
+    const senderUserId = (user as any)?.id || (user as any)?.userId;
+
+    // Normalize target role (agar ALL ya empty ho toh null)
+    let parsedTargetRole: Role | null = null;
+    if (targetRole && targetRole !== 'ALL') {
+      parsedTargetRole = targetRole.toUpperCase() as Role;
+    }
+
+    // Map priority enum safely
+    const computedPriority =
+      priority === 'URGENT' || isPinned === true
+        ? NoticePriority.URGENT
+        : NoticePriority.NORMAL;
+
     const announcement = await db.announcement.create({
       data: {
         title: title.trim(),
         content: content.trim(),
-        senderId: user?.userId || 'ADMIN',
-        senderRole: (user?.role as Role) || Role.ADMIN,
-        senderName: user?.email || 'Central Academic Office',
-        targetRole: targetRole || null,
-        centerId: centerId || null,
-        isPinned: Boolean(isPinned),
+        priority: computedPriority,
+        senderId: senderUserId || undefined,
+        senderRole: (user?.role?.toUpperCase() as Role) || Role.ADMIN,
+        senderName:
+          (user as any)?.fullName ||
+          (user as any)?.name ||
+          user?.email ||
+          'Central Academic Office',
+        targetRole: parsedTargetRole,
+        centerId: centerId && centerId !== 'ALL' ? centerId : null,
       },
     });
 
     return NextResponse.json({
       success: true,
       message: 'Official circular broadcasted across designated channels.',
-      announcement,
+      announcement: {
+        ...announcement,
+        isPinned: announcement.priority === NoticePriority.URGENT,
+      },
     });
   } catch (error: any) {
     console.error('Broadcast Circular Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to dispatch circular broadcast.' },
+      { error: error?.message || 'Failed to dispatch circular broadcast.' },
       { status: 500 }
     );
   }
@@ -92,8 +137,11 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const user = await getCurrentUser();
-    if (user && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Unauthorized: Admin access only' }, { status: 403 });
+    if (!isAuthorizedAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Administrative credentials required.' },
+        { status: 403 }
+      );
     }
 
     const { searchParams } = new URL(req.url);
@@ -114,7 +162,7 @@ export async function DELETE(req: Request) {
   } catch (error: any) {
     console.error('Delete Circular Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to delete circular.' },
+      { error: error?.message || 'Failed to delete circular.' },
       { status: 500 }
     );
   }

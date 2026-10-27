@@ -106,7 +106,6 @@ export async function POST(
       amount,
       paymentMode = 'CASH',
       installmentId,
-      transactionRef = '',
     } = body;
 
     const installmentAmount = Math.max(0, Number(amount) || 0);
@@ -144,7 +143,6 @@ export async function POST(
     const newPaidAmount = currentPaid + installmentAmount;
     const newBalance = Math.max(0, totalAmount - newPaidAmount);
 
-    // Dynamic String/Enum status mapping
     let newStatus: any = 'PARTIAL';
     if (newPaidAmount >= totalAmount) {
       newStatus = 'PAID';
@@ -156,17 +154,18 @@ export async function POST(
     const currentYear = new Date().getFullYear();
     const paymentCount = await db.payment.count();
     const receiptNo = `REC-${currentYear}-${(paymentCount + 1).toString().padStart(4, '0')}`;
+    const receiptUrl = `/receipt/${receiptNo}`;
 
     // Transaction execution
     const paymentResult = await db.$transaction(async (tx) => {
-      // 1. Create Payment Record
+      // 1. Create Payment Record (schema-safe without transactionRef)
       const paymentRecord = await tx.payment.create({
         data: {
           feePlanId: currentFeePlan.id,
           amount: installmentAmount,
           mode: paymentMode,
           receiptNo,
-          ...(transactionRef ? { transactionRef } : {}),
+          receiptUrl,
         },
       });
 
@@ -180,7 +179,7 @@ export async function POST(
         },
       });
 
-      // 3. Mark installments as PAID sequentially based on amount
+      // 3. Mark installments as PAID sequentially based on collected amount
       if (installmentId) {
         await tx.installment.update({
           where: { id: installmentId },
@@ -202,7 +201,7 @@ export async function POST(
       return { paymentRecord, updatedPlan };
     });
 
-    // 4. Send Email Receipt with official template
+    // 4. Send Email Receipt asynchronously
     if (student.user?.email) {
       sendPaymentReceiptEmail({
         toEmail: student.user.email,
@@ -211,6 +210,7 @@ export async function POST(
         outstandingBalance: newBalance,
         receiptNumber: receiptNo,
         paymentMode,
+        receiptUrl,
       }).catch((mailErr) =>
         console.error('Payment receipt email dispatch failed:', mailErr)
       );
@@ -220,6 +220,7 @@ export async function POST(
       success: true,
       message: `Payment of ₹${installmentAmount.toLocaleString('en-IN')} recorded successfully.`,
       receiptNo,
+      receiptUrl,
       payment: paymentResult.paymentRecord,
       feeSummary: {
         totalAmount,

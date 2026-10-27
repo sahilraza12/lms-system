@@ -1,29 +1,43 @@
 import { NextResponse } from 'next/server';
-import { unstable_rethrow } from 'next/navigation';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
+// Helper: Resilient Teacher Profile Lookup across session identifiers
+async function resolveTeacher(user: any) {
+  if (!user || user.role?.toUpperCase() !== 'TEACHER') {
+    return null;
+  }
+
+  const currentTeacherId = user.teacherId;
+  const currentUserId = user.id || user.userId;
+
+  return await db.teacher.findFirst({
+    where: {
+      OR: [
+        ...(currentTeacherId ? [{ id: currentTeacherId }] : []),
+        ...(currentUserId ? [{ userId: currentUserId }, { id: currentUserId }] : []),
+      ],
+    },
+    select: {
+      id: true,
+      fullName: true,
+      teacherCode: true,
+      specialization: true,
+      isActive: true,
+    },
+  });
+}
+
+// 1. GET: Fetch cohort students assigned to this mentor with attendance logs
 export async function GET() {
   try {
-    const currentUser = await getCurrentUser();
-    if (!currentUser || currentUser.role !== 'TEACHER') {
-      return NextResponse.json({ error: 'Unauthorized: Teacher access only.' }, { status: 401 });
-    }
+    const user = await getCurrentUser();
+    const teacher = await resolveTeacher(user);
 
-    const teacher = currentUser.teacherId
-      ? await db.teacher.findUnique({
-          where: { id: currentUser.teacherId },
-          select: { id: true, fullName: true, teacherCode: true, specialization: true },
-        })
-      : await db.teacher.findUnique({
-          where: { userId: currentUser.userId },
-          select: { id: true, fullName: true, teacherCode: true, specialization: true },
-        });
-
-    if (!teacher) {
+    if (!teacher || !teacher.isActive) {
       return NextResponse.json(
-        { error: 'Teacher profile is not configured.' },
-        { status: 403 },
+        { error: 'Unauthorized: Active teacher profile not found.' },
+        { status: 403 }
       );
     }
 
@@ -49,10 +63,95 @@ export async function GET() {
       students,
     });
   } catch (error: unknown) {
-    unstable_rethrow(error);
     console.error('Fetch Teacher Students API Error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch assigned students.' },
+      { error: error instanceof Error ? error.message : 'Failed to fetch assigned students.' },
+      { status: 500 }
+    );
+  }
+}
+
+// 2. POST: Save / Sync Daily Attendance Register
+export async function POST(req: Request) {
+  try {
+    const user = await getCurrentUser();
+    const teacher = await resolveTeacher(user);
+
+    if (!teacher || !teacher.isActive) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Active teacher profile not found.' },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json().catch(() => null);
+    if (!body || !Array.isArray(body.records)) {
+      return NextResponse.json(
+        { error: 'Invalid attendance payload. Expected array of student records.' },
+        { status: 400 }
+      );
+    }
+
+    // Set normalized day boundary for clean date comparison
+    const targetDate = body.date ? new Date(body.date) : new Date();
+    targetDate.setHours(0, 0, 0, 0);
+
+    const nextDate = new Date(targetDate);
+    nextDate.setDate(nextDate.getDate() + 1);
+
+    // Dynamic delegate check: supports both 'attendance' and 'attendanceRecord' model names
+    const attendanceDelegate = (db as any).attendance || (db as any).attendanceRecord;
+
+    if (!attendanceDelegate) {
+      return NextResponse.json(
+        { error: 'Attendance model delegate not found in Prisma Client.' },
+        { status: 500 }
+      );
+    }
+
+    // Synchronize each candidate attendance entry
+    for (const record of body.records) {
+      if (!record.studentId) continue;
+
+      const existingRecord = await attendanceDelegate.findFirst({
+        where: {
+          studentId: record.studentId,
+          date: {
+            gte: targetDate,
+            lt: nextDate,
+          },
+        },
+      });
+
+      if (existingRecord) {
+        await attendanceDelegate.update({
+          where: { id: existingRecord.id },
+          data: {
+            status: record.status || 'PRESENT',
+            remarks: record.remarks || null,
+          },
+        });
+      } else {
+        await attendanceDelegate.create({
+          data: {
+            studentId: record.studentId,
+            date: targetDate,
+            status: record.status || 'PRESENT',
+            remarks: record.remarks || null,
+          },
+        });
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Attendance synchronized successfully for ${body.records.length} students.`,
+      date: targetDate,
+    });
+  } catch (error: unknown) {
+    console.error('Save Attendance Register Error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to save attendance register.' },
       { status: 500 }
     );
   }

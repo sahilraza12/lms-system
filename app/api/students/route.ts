@@ -3,8 +3,12 @@ import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-// Helper: Safely resolve centerId from session
+// Helper: Safely resolve centerId with strict fallbacks
 async function resolveCenterId(user: any, fallbackId?: string | null) {
+  if (fallbackId && fallbackId !== 'default-center-id' && fallbackId.trim() !== '') {
+    return fallbackId;
+  }
+
   if (user?.centerId) return user.centerId;
 
   const currentUserId = user?.id || user?.userId;
@@ -22,10 +26,6 @@ async function resolveCenterId(user: any, fallbackId?: string | null) {
       select: { id: true },
     });
     if (centerRecord?.id) return centerRecord.id;
-  }
-
-  if (fallbackId && fallbackId !== 'default-center-id') {
-    return fallbackId;
   }
 
   const fallbackCenter = await db.center.findFirst({ select: { id: true } });
@@ -57,7 +57,7 @@ export async function GET(req: Request) {
         include: {
           user: { select: { email: true } },
           course: { select: { id: true, title: true, totalFee: true } },
-          assignedTeacher: { select: { id: true, fullName: true, teacherCode: true } },
+          teacher: { select: { id: true, fullName: true, teacherCode: true } },
           feePlan: {
             select: {
               id: true,
@@ -66,6 +66,11 @@ export async function GET(req: Request) {
               paidAmount: true,
               balance: true,
               status: true,
+              payments: {
+                orderBy: { paymentDate: 'desc' },
+                take: 1,
+                select: { receiptNo: true, id: true },
+              },
             },
           },
         },
@@ -82,14 +87,24 @@ export async function GET(req: Request) {
       }),
     ]);
 
-    const students = studentRecords.map(({ course, ...student }) => ({
+    const students = studentRecords.map(({ course, teacher, ...student }) => ({
       ...student,
-      course: course ? { ...course, price: course.totalFee } : null,
+      assignedTeacher: teacher,
+      course: course ? { ...course, price: Number(course.totalFee) } : null,
+      feePlan: student.feePlan
+        ? {
+            ...student.feePlan,
+            totalAmount: Number(student.feePlan.totalAmount),
+            paidAmount: Number(student.feePlan.paidAmount),
+            balance: Number(student.feePlan.balance),
+            latestReceiptNo: student.feePlan.payments?.[0]?.receiptNo || null,
+          }
+        : null,
     }));
 
     const courses = courseRecords.map((course) => ({
       ...course,
-      price: course.totalFee,
+      price: Number(course.totalFee),
     }));
 
     return NextResponse.json({
@@ -108,11 +123,15 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. Enroll New Student & Configure Billing Plan
+// 2. Enroll New Student & Configure Billing Plan + Generate Compliant Receipt
 export async function POST(req: Request) {
   try {
     const user = await getCurrentUser();
-    const body = await req.json();
+    const body = await req.json().catch(() => null);
+
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid request payload.' }, { status: 400 });
+    }
 
     const {
       fullName,
@@ -122,23 +141,23 @@ export async function POST(req: Request) {
       password,
       courseId,
       teacherId,
-      feeType, // 'ONE_TIME' | 'EMI'
+      feeType,
       totalAmount,
       initialPayment,
       installmentCount,
     } = body;
 
-    // Resolve centerId either from request body or logged-in user
-    const centerId = body.centerId || (await resolveCenterId(user));
+    const centerId = await resolveCenterId(user, body.centerId);
 
     if (!fullName || !studentCode || !email || !password || !courseId || !centerId) {
       return NextResponse.json(
-        { error: 'Name, student code, email, password, course, and center are required.' },
+        { error: 'Name, roll code, email, password, course, and center are required.' },
         { status: 400 }
       );
     }
 
     const cleanEmail = email.trim().toLowerCase();
+    const cleanStudentCode = studentCode.trim().toUpperCase();
 
     // Check duplicate email
     const existingUser = await db.user.findUnique({ where: { email: cleanEmail } });
@@ -147,7 +166,7 @@ export async function POST(req: Request) {
     }
 
     // Check duplicate student code
-    const existingCode = await db.student.findUnique({ where: { studentCode: studentCode.trim().toUpperCase() } });
+    const existingCode = await db.student.findUnique({ where: { studentCode: cleanStudentCode } });
     if (existingCode) {
       return NextResponse.json({ error: 'Student Roll Code already exists.' }, { status: 400 });
     }
@@ -157,8 +176,14 @@ export async function POST(req: Request) {
     const parsedInitial = Math.max(0, Number(initialPayment) || 0);
     const remainingBalance = Math.max(0, parsedTotal - parsedInitial);
 
+    // Generate Standard REC-YYYY-XXXX for advance payment if collected
+    const currentYear = new Date().getFullYear();
+    const paymentCount = await db.payment.count();
+    const receiptNo = `REC-${currentYear}-${(paymentCount + 1).toString().padStart(4, '0')}`;
+    const receiptUrl = `/receipt/${receiptNo}`;
+
     const result = await db.$transaction(async (tx) => {
-      // 1. Create User
+      // 1. Create Base User
       const newUser = await tx.user.create({
         data: {
           name: fullName.trim(),
@@ -171,7 +196,7 @@ export async function POST(req: Request) {
       // 2. Create Student Record
       const newStudent = await tx.student.create({
         data: {
-          studentCode: studentCode.trim().toUpperCase(),
+          studentCode: cleanStudentCode,
           fullName: fullName.trim(),
           phone: phone?.trim() || '',
           dob: body.dob ? new Date(body.dob) : new Date('2000-01-01T00:00:00.000Z'),
@@ -192,23 +217,26 @@ export async function POST(req: Request) {
           totalAmount: parsedTotal,
           paidAmount: parsedInitial,
           balance: remainingBalance,
-          status: remainingBalance === 0 ? 'PAID' : parsedInitial > 0 ? 'PARTIAL' : 'PENDING',
+          status: remainingBalance === 0 && parsedTotal > 0 ? 'PAID' : parsedInitial > 0 ? 'PARTIAL' : 'PENDING',
         },
       });
 
-      // 4. Record Initial Receipt if advance payment was collected
+      let initialPaymentRecord = null;
+
+      // 4. Record Initial Payment Receipt (Safe schema matching without transactionRef)
       if (parsedInitial > 0) {
-        await tx.payment.create({
+        initialPaymentRecord = await tx.payment.create({
           data: {
             feePlanId: newFeePlan.id,
             amount: parsedInitial,
             mode: body.paymentMode || 'CASH',
-            receiptNo: `RCP-${Date.now().toString().slice(-6)}`,
+            receiptNo,
+            receiptUrl,
           },
         });
       }
 
-      // 5. Generate EMI Installment milestones if EMI chosen
+      // 5. Generate EMI Installment Milestones
       if (feeType === 'EMI' && remainingBalance > 0) {
         const count = Math.max(1, Number(installmentCount) || 3);
         const perInstallment = Math.round(remainingBalance / count);
@@ -229,13 +257,20 @@ export async function POST(req: Request) {
         }
       }
 
-      return { student: newStudent, user: newUser, feePlan: newFeePlan };
+      return {
+        student: newStudent,
+        user: newUser,
+        feePlan: newFeePlan,
+        payment: initialPaymentRecord,
+      };
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Candidate enrolled and billing plan initialized.',
+      message: 'Candidate enrolled and billing plan initialized successfully.',
       student: result.student,
+      receiptNo: result.payment?.receiptNo || null,
+      receiptUrl: result.payment?.receiptUrl || null,
     });
   } catch (error: unknown) {
     console.error('Admission Error:', error);

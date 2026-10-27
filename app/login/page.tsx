@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -13,6 +13,7 @@ import {
   Users,
   Eye,
   EyeOff,
+  Loader2,
 } from 'lucide-react';
 
 type RoleType = 'student' | 'center' | 'teacher' | 'admin';
@@ -57,68 +58,6 @@ const ROLE_CONFIG = {
   }
 >;
 
-function getErrorMessage(payload: unknown): string | null {
-  if (
-    payload &&
-    typeof payload === 'object' &&
-    'error' in payload &&
-    typeof payload.error === 'string'
-  ) {
-    return payload.error;
-  }
-  return null;
-}
-
-function getRedirectRoute(
-  payload: unknown,
-  fallback: string,
-  role: RoleType,
-): string {
-  if (
-    !payload ||
-    typeof payload !== 'object' ||
-    !('redirectUrl' in payload) ||
-    typeof payload.redirectUrl !== 'string'
-  ) {
-    return fallback;
-  }
-
-  const redirectUrl = payload.redirectUrl;
-  const roleRedirects: Record<RoleType, string[]> = {
-    student: ['/student'],
-    center: ['/center'],
-    teacher: ['/dashboard/teacher'],
-    admin: ['/admin'],
-  };
-  return roleRedirects[role].some(
-    (route) => redirectUrl === route || redirectUrl.startsWith(`${route}/`),
-  )
-    ? redirectUrl
-    : fallback;
-}
-
-function getRequestedRedirect(role: RoleType): string | null {
-  if (typeof window === 'undefined') return null;
-  const requested = new URLSearchParams(window.location.search).get('redirect');
-  if (!requested) return null;
-
-  const target = new URL(requested, window.location.origin);
-  if (target.origin !== window.location.origin) return null;
-
-  const allowedPrefixes: Record<RoleType, string[]> = {
-    student: ['/student', '/dashboard/student'],
-    center: ['/center', '/dashboard/center'],
-    teacher: ['/teacher', '/dashboard/teacher'],
-    admin: ['/admin', '/dashboard/admin'],
-  };
-  const allowed = allowedPrefixes[role].some(
-    (prefix) =>
-      target.pathname === prefix || target.pathname.startsWith(`${prefix}/`),
-  );
-
-  return allowed ? `${target.pathname}${target.search}${target.hash}` : null;
-}
-
 export default function LoginPage() {
   const router = useRouter();
   const [role, setRole] = useState<RoleType>('student');
@@ -130,6 +69,11 @@ export default function LoginPage() {
 
   const current = ROLE_CONFIG[role];
   const Icon = current.icon;
+
+  const selectRole = (newRole: RoleType) => {
+    setRole(newRole);
+    setError('');
+  };
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -155,32 +99,18 @@ export default function LoginPage() {
         }),
       });
 
-      const payload: unknown = await response.json();
+      const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(
-          getErrorMessage(payload) || 'Unable to sign in. Check your details and try again.',
-        );
+        throw new Error(payload?.error || 'Unable to sign in. Check your details.');
       }
 
-      if (
-        !payload ||
-        typeof payload !== 'object' ||
-        !('success' in payload) ||
-        payload.success !== true
-      ) {
-        throw new Error('The server returned an invalid sign-in response.');
-      }
-
-      router.replace(
-        getRequestedRedirect(role) ||
-          getRedirectRoute(payload, current.targetRoute, role),
-      );
+      router.push(payload?.redirectUrl || current.targetRoute);
       router.refresh();
-    } catch (loginError) {
+    } catch (loginError: unknown) {
       setError(
         loginError instanceof Error
           ? loginError.message
-          : 'Unable to sign in. Please try again.',
+          : 'Unable to sign in. Please try again.'
       );
     } finally {
       setLoading(false);
@@ -188,63 +118,88 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="viq-page relative flex min-h-screen w-full flex-col justify-between overflow-hidden p-6 sm:p-12">
-      <div className="pointer-events-none absolute inset-0 viq-grid-bg opacity-30" />
-      <div className="pointer-events-none absolute left-1/2 top-1/4 h-[350px] w-[600px] -translate-x-1/2 rounded-full bg-orange-500/10 blur-[140px]" />
+    <main className="relative flex min-h-screen w-full flex-col justify-between overflow-hidden bg-[#07090E] p-6 text-slate-100 sm:p-12 font-sans select-none">
+      
+      {/* Background Decorators - Completely isolated in back layer */}
+      <div 
+        style={{ pointerEvents: 'none' }} 
+        className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:32px_32px] opacity-30" 
+      />
+      <div 
+        style={{ pointerEvents: 'none' }} 
+        className="pointer-events-none absolute left-1/2 top-1/4 z-0 h-[320px] w-[500px] -translate-x-1/2 rounded-full bg-orange-500/10 blur-[130px]" 
+      />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between">
+      {/* Top Bar Navigation */}
+      <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between">
         <Link
           href="/"
-          className="viq-pill inline-flex items-center gap-2 px-4 py-2 text-xs font-bold"
+          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0D111A] px-4 py-2 text-xs font-bold text-slate-300 hover:text-white hover:bg-white/5 transition"
         >
           <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
           <span>Back to Home</span>
         </Link>
-        <div className="flex items-center gap-2 text-[11px] font-mono viq-text-muted">
+        <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
           <Lock aria-hidden="true" className="h-3.5 w-3.5 text-emerald-500" />
           <span>SECURE ROLE-BASED SIGN IN</span>
         </div>
-      </div>
+      </header>
 
-      <div className="relative z-10 mx-auto my-auto w-full max-w-md py-8">
-        <section className="viq-card space-y-7 p-8">
-          <div
-            className="grid grid-cols-2 gap-2 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-glass-subtle)] p-1.5 sm:grid-cols-4"
-            aria-label="Choose account type"
+      {/* Main Login Workspace Box */}
+      <div className="relative z-30 mx-auto my-auto w-full max-w-md py-6" style={{ isolation: 'isolate' }}>
+        <section className="space-y-6 rounded-3xl border border-white/10 bg-[#0D111A] p-7 sm:p-8 shadow-2xl backdrop-blur-md">
+          
+          {/* TAB SWITCHER - Direct High-Priority Event Binding */}
+          <div 
+            className="flex items-center justify-between rounded-2xl border border-white/10 bg-[#121620] p-1.5 relative z-50"
+            style={{ pointerEvents: 'auto' }}
           >
-            {(['student', 'center', 'teacher', 'admin'] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                aria-pressed={role === option}
-                onClick={() => {
-                  setRole(option);
-                  setError('');
-                }}
-                className={`rounded-xl py-2.5 text-xs font-bold uppercase tracking-wider transition-all ${
-                  role === option
-                    ? 'viq-btn-primary shadow-md'
-                    : 'viq-text-secondary hover:text-[var(--text-primary)]'
-                }`}
-              >
-                {option}
-              </button>
-            ))}
+            {(['student', 'center', 'teacher', 'admin'] as const).map((option) => {
+              const isActive = role === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    selectRole(option);
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    selectRole(option);
+                  }}
+                  className={`flex-1 rounded-xl py-2 text-center text-xs font-black uppercase tracking-wider transition-all duration-150 cursor-pointer ${
+                    isActive
+                      ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/30 font-bold'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
+                  style={{
+                    cursor: 'pointer',
+                    WebkitTapHighlightColor: 'transparent',
+                    touchAction: 'manipulation',
+                  }}
+                >
+                  {option}
+                </button>
+              );
+            })}
           </div>
 
-          <header className="space-y-2 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-orange-500/20 bg-orange-500/10 text-orange-500">
-              <Icon aria-hidden="true" className="h-6 w-6" />
+          {/* Dynamic Header */}
+          <header className="space-y-2 text-center pt-1">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-orange-500/20 bg-orange-500/10 text-orange-500 shadow-inner">
+              <Icon aria-hidden="true" className="h-6 w-6 stroke-[2.2]" />
             </div>
-            <h1 className="text-2xl font-black tracking-tight">{current.title}</h1>
-            <p className="text-xs leading-relaxed viq-text-secondary">{current.subtitle}</p>
+            <h1 className="text-xl font-black tracking-tight text-white">{current.title}</h1>
+            <p className="text-xs leading-relaxed text-slate-400 max-w-xs mx-auto">{current.subtitle}</p>
           </header>
 
+          {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 text-left">
               <label
                 htmlFor="login-identifier"
-                className="text-[11px] font-mono font-bold uppercase viq-text-muted"
+                className="text-[10px] font-mono font-bold uppercase text-slate-400 tracking-wider block"
               >
                 Workspace Identifier
               </label>
@@ -257,14 +212,14 @@ export default function LoginPage() {
                 value={identifier}
                 onChange={(event) => setIdentifier(event.target.value)}
                 placeholder={current.placeholder}
-                className="viq-input w-full px-4 py-3 text-xs"
+                className="w-full rounded-xl border border-white/10 bg-[#121620] px-4 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500/60 transition"
               />
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 text-left">
               <label
                 htmlFor="login-password"
-                className="text-[11px] font-mono font-bold uppercase viq-text-muted"
+                className="text-[10px] font-mono font-bold uppercase text-slate-400 tracking-wider block"
               >
                 Password
               </label>
@@ -278,7 +233,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="••••••••"
-                  className="viq-input w-full px-4 py-3 pr-11 text-xs"
+                  className="w-full rounded-xl border border-white/10 bg-[#121620] px-4 py-3 pr-11 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500/60 transition"
                 />
                 <button
                   type="button"
@@ -298,7 +253,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <p className="text-sm font-medium text-red-500" role="alert">
+              <p className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-center text-xs font-medium text-red-400" role="alert">
                 {error}
               </p>
             )}
@@ -306,18 +261,28 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="viq-btn-primary flex w-full items-center justify-center gap-2 py-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3.5 text-xs font-bold text-black transition hover:bg-orange-400 shadow-lg shadow-orange-500/20 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <span>{loading ? 'Signing in…' : `Sign in as ${role}`}</span>
-              <ArrowRight aria-hidden="true" className="h-4 w-4" />
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Signing in…</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign in as {role}</span>
+                  <ArrowRight aria-hidden="true" className="h-4 w-4 stroke-[2.5]" />
+                </>
+              )}
             </button>
           </form>
         </section>
       </div>
 
-      <div className="relative z-10 mx-auto w-full max-w-6xl text-center text-[11px] font-mono viq-text-muted">
+      {/* Footer */}
+      <footer className="relative z-20 mx-auto w-full max-w-6xl text-center text-[10px] font-mono tracking-widest text-slate-600 uppercase">
         SECURE SESSION // VIQ TECHNOLOGIES
-      </div>
+      </footer>
     </main>
   );
 }

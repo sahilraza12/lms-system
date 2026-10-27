@@ -5,42 +5,32 @@ import { getCurrentUser } from '@/lib/auth';
 export async function GET() {
   try {
     const user = await getCurrentUser();
-    if (!user || user.role !== 'STUDENT') {
+    if (!user || user.role?.toUpperCase() !== 'STUDENT') {
       return NextResponse.json(
         { error: 'Unauthorized: Student access only' },
         { status: 401 }
       );
     }
 
-    // Session token se userId retrieve karein
-    const userId =
-      (user as { userId?: string; id?: string }).userId ||
-      (user as { userId?: string; id?: string }).id;
+    const currentUserId = (user as any)?.id || (user as any)?.userId;
+    const currentUserEmail = (user as any)?.email;
+    const currentStudentCode = (user as any)?.studentCode || (user as any)?.identifier;
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Invalid user session' },
-        { status: 401 }
-      );
-    }
-
-    // Pehle verified student profile record retrieve karein
-    const studentInfo = await db.student.findUnique({
-      where: { userId },
-      select: { id: true },
-    });
-
-    if (!studentInfo) {
-      return NextResponse.json(
-        { error: 'Student record not found for this account' },
-        { status: 404 }
-      );
-    }
-
-    // Student profile with notes, tasks, candidate-specific lab submissions, fee plan & certificates
-    const student = await db.student.findUnique({
-      where: { id: studentInfo.id },
+    const student = await db.student.findFirst({
+      where: {
+        OR: [
+          ...(currentUserId ? [{ userId: currentUserId }, { id: currentUserId }] : []),
+          ...(currentUserEmail ? [{ user: { email: currentUserEmail } }] : []),
+          ...(currentStudentCode ? [{ studentCode: currentStudentCode }] : []),
+        ],
+      },
       include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
         center: {
           select: {
             id: true,
@@ -58,9 +48,7 @@ export async function GET() {
             tasks: {
               orderBy: { dueDate: 'asc' },
               include: {
-                submissions: {
-                  where: { studentId: studentInfo.id },
-                },
+                submissions: true,
               },
             },
           },
@@ -81,9 +69,76 @@ export async function GET() {
       },
     });
 
+    if (!student) {
+      return NextResponse.json(
+        { error: 'Student record not found for this account' },
+        { status: 404 }
+      );
+    }
+
+    // Sirf wahi tasks jisme student ki submission filtered ho
+    const courseTasks = (student.course?.tasks || []).map((task) => ({
+      ...task,
+      submissions: task.submissions.filter((sub) => sub.studentId === student.id),
+    }));
+
+    // Pure dynamic course data (Database me notes honge to aayenge, nahi to empty array [])
+    const dynamicCourse = student.course
+      ? {
+          ...student.course,
+          notes: student.course.notes || [],
+          tasks: courseTasks,
+        }
+      : null;
+
+    // Academic progress telemetry
+    const totalTasks = courseTasks.length;
+    const completedTasks = courseTasks.filter((t) =>
+      t.submissions.some((s) => s.status === 'SUBMITTED' || s.status === 'REVIEWED')
+    ).length;
+
+    const curriculumProgress =
+      totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+    // Financial fee summary
+    const feePlan = student.feePlan;
+    const totalAmount = Number(feePlan?.totalAmount || student.course?.totalFee || 0);
+    const paidAmount = Number(feePlan?.paidAmount || 0);
+    const balance = Number(feePlan?.balance || Math.max(0, totalAmount - paidAmount));
+
+    const normalizedStudent = {
+      ...student,
+      progress: curriculumProgress,
+      course: dynamicCourse,
+      feePlan: feePlan
+        ? {
+            ...feePlan,
+            totalAmount,
+            paidAmount,
+            balance,
+            payments: (feePlan.payments || []).map((p) => ({
+              ...p,
+              amount: Number(p.amount),
+              receiptUrl: `/receipt/${p.receiptNo || p.id}?from=student`,
+            })),
+            installments: (feePlan.installments || []).map((i) => ({
+              ...i,
+              amount: Number(i.amount),
+            })),
+          }
+        : null,
+    };
+
     return NextResponse.json({
       success: true,
-      student,
+      student: normalizedStudent,
+      billingSummary: {
+        totalAmount,
+        paidAmount,
+        balance,
+        status: feePlan?.status || (balance === 0 && totalAmount > 0 ? 'PAID' : 'PENDING'),
+        progress: curriculumProgress,
+      },
     });
   } catch (error: unknown) {
     console.error('Fetch student profile error:', error);

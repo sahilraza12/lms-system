@@ -1,14 +1,23 @@
 import { NextResponse } from 'next/server';
 import { unstable_rethrow } from 'next/navigation';
-import { Prisma, Role } from '@prisma/client';
+import { Prisma, Role, NoticePriority } from '@prisma/client';
 import { db } from '@/lib/db';
+import { getCurrentUser } from '@/lib/auth';
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const roleParam = searchParams.get('role')?.toUpperCase();
-    const centerId = searchParams.get('centerId');
-    const teacherId = searchParams.get('teacherId');
+    let roleParam = searchParams.get('role')?.toUpperCase();
+    let centerId = searchParams.get('centerId');
+
+    // Fallback: Auto-detect from active session if params are omitted
+    const user = await getCurrentUser();
+    if (user && !roleParam) {
+      roleParam = user.role?.toUpperCase();
+    }
+    if (user && !centerId && (user as any)?.centerId) {
+      centerId = (user as any).centerId;
+    }
 
     const targetRole =
       roleParam === 'STUDENT'
@@ -21,39 +30,32 @@ export async function GET(req: Request) {
 
     // Audience filter logic matching multi-tier scoping
     const audienceFilters: Prisma.AnnouncementWhereInput[] = [
-      // 1. Global circulars (for everyone)
-      { targetRole: null, centerId: null, teacherId: null },
+      // 1. Global circulars (for everyone across the institution)
+      { targetRole: null, centerId: null },
     ];
 
-    // 2. Global role-specific circulars (e.g. All Students across all centers)
+    // 2. Role-specific global circulars (e.g., All Students across all branches)
     if (targetRole) {
       audienceFilters.push({
         targetRole,
         centerId: null,
-        teacherId: null,
       });
     }
 
-    // 3. Center-specific circulars
-    if (centerId) {
+    // 3. Center/Branch specific circulars
+    if (centerId && centerId !== 'ALL') {
       audienceFilters.push({ centerId, targetRole: null });
       if (targetRole) {
         audienceFilters.push({ centerId, targetRole });
       }
     }
 
-    // 4. Teacher's specific cohort circulars
-    if (teacherId && (targetRole === Role.STUDENT || targetRole === Role.TEACHER)) {
-      audienceFilters.push({ teacherId });
-    }
-
-    const announcements = await db.announcement.findMany({
+    const rawAnnouncements = await db.announcement.findMany({
       where: {
         OR: audienceFilters,
       },
       include: {
         center: { select: { name: true, centerCode: true } },
-        teacher: { select: { fullName: true, teacherCode: true } },
       },
       orderBy: [
         { priority: 'desc' },
@@ -62,7 +64,17 @@ export async function GET(req: Request) {
       take: 25,
     });
 
-    return NextResponse.json({ success: true, announcements });
+    const announcements = rawAnnouncements.map((item) => ({
+      ...item,
+      isPinned: item.priority === NoticePriority.URGENT,
+    }));
+
+    return NextResponse.json({
+      success: true,
+      count: announcements.length,
+      announcements,
+      circulars: announcements, // Compatibility for both circulars and announcements consumer keys
+    });
   } catch (error: unknown) {
     unstable_rethrow(error);
     console.error('Fetch Announcements Error:', error);

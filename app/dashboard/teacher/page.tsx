@@ -11,8 +11,11 @@ import {
   Save, 
   BookOpen, 
   ExternalLink,
-  Loader2
+  Loader2,
+  Calendar,
+  Sparkles
 } from 'lucide-react';
+import ThemeToggle from '@/components/theme/ThemeToggle';
 
 interface StudentItem {
   id: string;
@@ -58,7 +61,7 @@ function TeacherBatchContent() {
       }
     };
 
-    fetchBatchStudents();
+    void fetchBatchStudents();
   }, []);
 
   const handleStatusChange = (studentId: string, status: StatusType) => {
@@ -86,7 +89,7 @@ function TeacherBatchContent() {
     }));
 
     try {
-      const res = await fetch('/api/attendance/mark', {
+      const res = await fetch('/api/teacher/students', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -98,7 +101,7 @@ function TeacherBatchContent() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to submit attendance');
 
-      setSaveMessage({ type: 'success', text: `Attendance for ${selectedDate} saved!` });
+      setSaveMessage({ type: 'success', text: `Attendance for ${selectedDate} saved successfully!` });
       setTimeout(() => setSaveMessage(null), 3000);
     } catch (err: unknown) {
       setSaveMessage({
@@ -115,92 +118,98 @@ function TeacherBatchContent() {
   const lateCount = Object.values(attendanceMap).filter((s) => s === 'LATE').length;
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto p-4 sm:p-6">
+    <div className="teacher-portal-theme min-h-screen bg-slate-950 text-slate-100 font-sans p-4 sm:p-8 space-y-7 selection:bg-orange-500 selection:text-white">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-5">
         <div>
-          <h1 className="text-2xl font-black text-slate-900">Faculty Cohort & Attendance Register</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
+            <span>Faculty Cohort & Attendance Register</span>
+            <Sparkles className="w-5 h-5 text-orange-400" />
+          </h1>
+          <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
             Monitor assigned students, verify roll call, and sync daily class participation.
           </p>
         </div>
-        <Link
-          href="/dashboard/teacher/tasks"
-          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-2"
-        >
-          <BookOpen className="w-4 h-4 text-orange-400" />
-          <span>Manage Coursework Tasks</span>
-          <ExternalLink className="w-3.5 h-3.5" />
-        </Link>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <Link
+            href="/dashboard/teacher/tasks"
+            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-850 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-2 border border-slate-800 shadow-md hover:border-slate-700"
+          >
+            <BookOpen className="w-4 h-4 text-orange-400" />
+            <span>Manage Coursework Tasks</span>
+            <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+          </Link>
+        </div>
       </div>
 
       {/* Snapshot Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xs">
           <div className="flex justify-between items-start">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Enrolled</span>
+            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-300">Total Enrolled</span>
             <Users className="w-4 h-4 text-slate-400" />
           </div>
-          <p className="text-2xl font-black text-slate-900 mt-2 font-mono">{students.length}</p>
-          <span className="text-[11px] text-slate-500 mt-1 inline-block">Assigned Students</span>
+          <p className="text-3xl font-black text-white mt-2 font-mono tracking-tight">{students.length}</p>
+          <span className="text-[11px] text-slate-400 mt-1 inline-block">Assigned Students</span>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xs">
           <div className="flex justify-between items-start">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Marked Present</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-emerald-400">Marked Present</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
-          <p className="text-2xl font-black text-emerald-600 mt-2 font-mono">{presentCount}</p>
-          <span className="text-[11px] text-emerald-600 mt-1 inline-block">Ready for session</span>
+          <p className="text-3xl font-black text-emerald-400 mt-2 font-mono tracking-tight">{presentCount}</p>
+          <span className="text-[11px] text-emerald-400/80 mt-1 inline-block">Ready for session</span>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xs">
           <div className="flex justify-between items-start">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Marked Absent</span>
-            <XCircle className="w-4 h-4 text-red-500" />
+            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-red-400">Marked Absent</span>
+            <XCircle className="w-4 h-4 text-red-400" />
           </div>
-          <p className="text-2xl font-black text-red-600 mt-2 font-mono">{absentCount}</p>
-          <span className="text-[11px] text-red-500 mt-1 inline-block">Requires follow-up</span>
+          <p className="text-3xl font-black text-red-400 mt-2 font-mono tracking-tight">{absentCount}</p>
+          <span className="text-[11px] text-red-400/80 mt-1 inline-block">Requires follow-up</span>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xs">
           <div className="flex justify-between items-start">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Late Arrivals</span>
-            <Clock className="w-4 h-4 text-amber-500" />
+            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-amber-400">Late Arrivals</span>
+            <Clock className="w-4 h-4 text-amber-400" />
           </div>
-          <p className="text-2xl font-black text-amber-600 mt-2 font-mono">{lateCount}</p>
-          <span className="text-[11px] text-amber-600 mt-1 inline-block">Delayed entry</span>
+          <p className="text-3xl font-black text-amber-400 mt-2 font-mono tracking-tight">{lateCount}</p>
+          <span className="text-[11px] text-amber-400/80 mt-1 inline-block">Delayed entry</span>
         </div>
       </div>
 
       {/* Attendance Register Card */}
-      <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-xl overflow-hidden">
         {/* Action Bar */}
-        <div className="p-5 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
-              <CalendarCheck className="w-4 h-4 text-orange-500" />
+        <div className="p-5 bg-slate-950/80 border-b border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-slate-900 px-3.5 py-2 rounded-xl border border-slate-800 text-xs font-bold text-slate-200">
+              <CalendarCheck className="w-4 h-4 text-orange-400" />
               <span>Session Date:</span>
               <input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="font-mono bg-transparent outline-none cursor-pointer"
+                className="font-mono bg-transparent outline-none cursor-pointer text-white [color-scheme:dark]"
               />
             </div>
 
-            <div className="hidden sm:flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => handleMarkAll('PRESENT')}
-                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
+                className="px-3 py-1.5 text-xs font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition cursor-pointer"
               >
                 All Present
               </button>
               <button
                 type="button"
                 onClick={() => handleMarkAll('ABSENT')}
-                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition"
+                className="px-3 py-1.5 text-xs font-bold rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition cursor-pointer"
               >
                 All Absent
               </button>
@@ -210,8 +219,8 @@ function TeacherBatchContent() {
           <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
             {saveMessage && (
               <span
-                className={`text-xs font-bold ${
-                  saveMessage.type === 'success' ? 'text-emerald-600' : 'text-red-600'
+                className={`text-xs font-bold px-3 py-1 rounded-lg ${
+                  saveMessage.type === 'success' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
                 }`}
               >
                 {saveMessage.text}
@@ -222,7 +231,7 @@ function TeacherBatchContent() {
               type="button"
               disabled={saving || students.length === 0}
               onClick={handleSaveAttendance}
-              className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 transition disabled:opacity-50 shadow-sm cursor-pointer"
+              className="px-5 py-2.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 transition disabled:opacity-50 shadow-md shadow-orange-600/20 cursor-pointer"
             >
               {saving ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -238,14 +247,14 @@ function TeacherBatchContent() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-50/50">
+              <tr className="border-b border-slate-800 text-[11px] font-mono font-bold text-slate-400 uppercase tracking-wider bg-slate-950/40">
                 <th className="px-6 py-4">Student Profile</th>
                 <th className="px-6 py-4">Roll Code</th>
                 <th className="px-6 py-4">Course Track</th>
                 <th className="px-6 py-4 text-center">Participation Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-800">
               {loading ? (
                 <tr>
                   <td colSpan={4} className="px-6 py-12 text-center text-slate-400 font-medium">
@@ -264,27 +273,27 @@ function TeacherBatchContent() {
                   const currentStatus = attendanceMap[student.id] || 'PRESENT';
 
                   return (
-                    <tr key={student.id} className="hover:bg-slate-50/70 transition-colors">
+                    <tr key={student.id} className="hover:bg-slate-850/50 transition-colors">
                       <td className="px-6 py-4">
-                        <div className="font-bold text-slate-900">{student.fullName}</div>
-                        <div className="text-xs text-slate-500">{student.user?.email}</div>
-                        <div className="text-[11px] text-slate-400">{student.phone}</div>
+                        <div className="font-bold text-white text-sm">{student.fullName}</div>
+                        <div className="text-xs text-slate-400">{student.user?.email}</div>
+                        <div className="text-[11px] text-slate-500 font-mono">{student.phone}</div>
                       </td>
-                      <td className="px-6 py-4 font-mono font-bold text-slate-700 text-xs">
+                      <td className="px-6 py-4 font-mono font-bold text-orange-400 text-xs">
                         {student.studentCode}
                       </td>
-                      <td className="px-6 py-4 text-slate-700 text-xs font-medium">
+                      <td className="px-6 py-4 text-slate-300 text-xs font-medium">
                         {student.course?.title || 'Certification Track'}
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100 border border-slate-200">
+                        <div className="inline-flex items-center gap-1.5 p-1 rounded-xl bg-slate-950 border border-slate-800">
                           {(['PRESENT', 'LATE', 'ABSENT'] as StatusType[]).map((status) => {
                             const isSelected = currentStatus === status;
-                            let activeClass = 'bg-white text-slate-900 shadow-sm';
+                            let activeClass = 'bg-slate-800 text-slate-400';
                             if (isSelected) {
-                              if (status === 'PRESENT') activeClass = 'bg-emerald-600 text-white shadow-sm';
-                              if (status === 'LATE') activeClass = 'bg-amber-500 text-white shadow-sm';
-                              if (status === 'ABSENT') activeClass = 'bg-red-600 text-white shadow-sm';
+                              if (status === 'PRESENT') activeClass = 'bg-emerald-600 text-white font-black shadow-md';
+                              if (status === 'LATE') activeClass = 'bg-amber-500 text-white font-black shadow-md';
+                              if (status === 'ABSENT') activeClass = 'bg-red-600 text-white font-black shadow-md';
                             }
 
                             return (
@@ -292,8 +301,8 @@ function TeacherBatchContent() {
                                 key={status}
                                 type="button"
                                 onClick={() => handleStatusChange(student.id, status)}
-                                className={`px-3 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition cursor-pointer ${
-                                  isSelected ? activeClass : 'text-slate-500 hover:text-slate-900'
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase transition cursor-pointer ${
+                                  isSelected ? activeClass : 'text-slate-400 hover:text-white hover:bg-slate-900'
                                 }`}
                               >
                                 {status}
@@ -318,8 +327,8 @@ export default function TeacherBatchPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
+          <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
         </div>
       }
     >
