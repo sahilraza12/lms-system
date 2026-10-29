@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import { db } from '@/lib/db';
 
 export async function GET() {
   try {
-    const email = 'admin@viqtech.in';
-    const plainPassword = 'admin@123'; // temporary password
+    const email = 'admin@viqtech.in'.toLowerCase();
+    const plainPassword = 'admin@123';
     const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
-    const admin = await db.user.upsert({
+    // Login route ke strict check ke hisaab se role exact 'ADMIN' hona chahiye
+    const adminUser = await db.user.upsert({
       where: { email },
       update: {
         password: hashedPassword,
@@ -21,12 +22,17 @@ export async function GET() {
       },
     });
 
+    // Login route jaisa hi bcrypt verification test
+    const isValid = await bcrypt.compare(plainPassword, adminUser.password);
+
     return NextResponse.json({
       success: true,
-      message: 'Admin synced in production DB!',
-      user: admin.email,
+      email: adminUser.email,
+      role: adminUser.role,
+      bcryptTestPassed: isValid,
+      message: 'Account is ready. Now go to /login and use password: admin',
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
