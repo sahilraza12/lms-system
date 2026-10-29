@@ -6,10 +6,6 @@ const nextConfig: NextConfig = {
     // Build ke time type errors deploy ko block nahi karenge
     ignoreBuildErrors: true,
   },
-  eslint: {
-    // ESLint errors ko bhi build ke waqt ignore karega
-    ignoreDuringBuilds: true,
-  },
   experimental: {
     agentFeedback: true,
   },
