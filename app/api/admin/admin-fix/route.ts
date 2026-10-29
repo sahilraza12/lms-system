@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 export async function GET() {
   try {
     const email = 'admin@viqtech.in';
-    const plainPassword = 'admin'; // temporary password
+    const plainPassword = 'admin@123'; // temporary password
     const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
     const admin = await db.user.upsert({
