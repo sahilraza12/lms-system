@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Loader2,
   RefreshCw,
+  RotateCcw,
   Search,
   ArrowRight,
   AlertCircle,
@@ -37,7 +38,10 @@ export default function FranchiseCentersPage() {
   const [centers, setCenters] = useState<FranchiseCenter[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [updatingCenterId, setUpdatingCenterId] = useState<string | null>(null);
+  const [centersError, setCentersError] = useState('');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showInactiveCenters, setShowInactiveCenters] = useState(false);
   
   // Modal Workflow State: 'FORM' | 'OTP'
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -62,26 +66,77 @@ export default function FranchiseCentersPage() {
   const loadCenters = useCallback(async (isManual = false) => {
     try {
       if (isManual) setRefreshing(true);
+      setCentersError('');
       const res = await fetch('/api/admin/centers', { cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.centers)) {
-          const mapped: FranchiseCenter[] = json.centers.map((c: any) => ({
-            id: c.id,
-            name: c.name,
-            code: c.centerCode,
-            city: c.address || 'Active Node',
-            managerName: c.user?.fullName || 'Assigned Lead',
-            managerEmail: c.user?.email || 'N/A',
-            studentsCount: c._count?.students || 0,
-            revenue: c.totalCollected || 0,
-            status: 'ACTIVE',
-          }));
-          setCenters(mapped);
-        }
+      const json: unknown = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          typeof json === 'object' && json !== null && 'error' in json &&
+          typeof json.error === 'string'
+            ? json.error
+            : 'Failed to load centers.'
+        );
       }
-    } catch (err) {
-      console.warn('Center telemetry query failed:', err);
+      if (
+        typeof json !== 'object' ||
+        json === null ||
+        !('success' in json) ||
+        json.success !== true ||
+        !('centers' in json) ||
+        !Array.isArray(json.centers)
+      ) {
+        throw new Error('Center list response was invalid.');
+      }
+
+      const mapped: FranchiseCenter[] = json.centers.map((center: unknown) => {
+        if (
+          typeof center !== 'object' ||
+          center === null ||
+          !('id' in center) ||
+          !('name' in center) ||
+          !('centerCode' in center) ||
+          !('isActive' in center) ||
+          typeof center.isActive !== 'boolean' ||
+          !('_count' in center)
+        ) {
+          throw new Error('Center record is missing required fields.');
+        }
+
+        const user = 'user' in center ? center.user : null;
+        const counts = center._count;
+        return {
+          id: String(center.id),
+          name: String(center.name),
+          code: String(center.centerCode),
+          city: 'address' in center && typeof center.address === 'string'
+            ? center.address
+            : 'Active Node',
+          managerName: 'Assigned Lead',
+          managerEmail:
+            typeof user === 'object' &&
+            user !== null &&
+            'email' in user &&
+            typeof user.email === 'string'
+              ? user.email
+              : 'N/A',
+          studentsCount:
+            typeof counts === 'object' &&
+            counts !== null &&
+            'students' in counts &&
+            typeof counts.students === 'number'
+              ? counts.students
+              : 0,
+          revenue:
+            'totalCollected' in center && typeof center.totalCollected === 'number'
+              ? center.totalCollected
+              : 0,
+          status: center.isActive === true ? 'ACTIVE' : 'INACTIVE',
+        };
+      });
+      setCenters(mapped);
+    } catch (err: unknown) {
+      console.error('Center telemetry query failed:', err);
+      setCentersError(err instanceof Error ? err.message : 'Failed to load centers.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -198,16 +253,65 @@ export default function FranchiseCentersPage() {
     setOtpCode('');
   };
 
-  // Remove center
-  const handleDeleteCenter = (id: string) => {
-    const confirmDelete = window.confirm('Are you sure you want to deactivate and remove this partner center?');
-    if (confirmDelete) {
-      setCenters((prev) => prev.filter((c) => c.id !== id));
+  const handleToggleCenter = async (center: FranchiseCenter) => {
+    const isActive = center.status !== 'ACTIVE';
+    if (
+      !isActive &&
+      !window.confirm(
+        'Deactivate this center? Its users will lose access, but student and payment history will be preserved.'
+      )
+    ) {
+      return;
+    }
+
+    setUpdatingCenterId(center.id);
+    setCentersError('');
+    try {
+      const res = await fetch(`/api/admin/centers/${center.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive }),
+      });
+      const data: unknown = await res.json();
+      if (
+        !res.ok ||
+        typeof data !== 'object' ||
+        data === null ||
+        !('center' in data) ||
+        typeof data.center !== 'object' ||
+        data.center === null ||
+        !('isActive' in data.center) ||
+        typeof data.center.isActive !== 'boolean'
+      ) {
+        throw new Error(
+          typeof data === 'object' && data !== null && 'error' in data &&
+          typeof data.error === 'string'
+            ? data.error
+            : 'Failed to update center status.'
+        );
+      }
+
+      const updatedIsActive = data.center.isActive;
+      setCenters((current) =>
+        current.map((item) =>
+          item.id === center.id
+            ? { ...item, status: updatedIsActive ? 'ACTIVE' : 'INACTIVE' }
+            : item
+        )
+      );
+    } catch (err: unknown) {
+      console.error('Center status update failed:', err);
+      setCentersError(err instanceof Error ? err.message : 'Failed to update center status.');
+    } finally {
+      setUpdatingCenterId(null);
     }
   };
 
   // Client-side search filtering
-  const filteredCenters = centers.filter((c) => {
+  const visibleCenters = showInactiveCenters
+    ? centers
+    : centers.filter((center) => center.status === 'ACTIVE');
+  const filteredCenters = visibleCenters.filter((c) => {
     const q = searchQuery.toLowerCase();
     return (
       c.name.toLowerCase().includes(q) ||
@@ -226,7 +330,9 @@ export default function FranchiseCentersPage() {
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2">
             <span>Franchise Centers Management</span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-orange-500/10 text-orange-400 border border-orange-500/20 font-bold">
-              {loading ? '...' : `${centers.length} Regional Nodes`}
+              {loading
+                ? '...'
+                : `${centers.filter((center) => center.status === 'ACTIVE').length} Active / ${centers.length} Total`}
             </span>
           </h1>
           <p className="text-xs sm:text-sm viq-text-secondary mt-1">
@@ -256,6 +362,11 @@ export default function FranchiseCentersPage() {
       </div>
 
       {/* 2. Instant Search Filter */}
+      {centersError && (
+        <p role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs font-semibold text-red-400">
+          {centersError}
+        </p>
+      )}
       <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -267,8 +378,19 @@ export default function FranchiseCentersPage() {
             className="viq-input w-full pl-9 pr-4 py-2.5 text-xs"
           />
         </div>
-        <div className="text-xs font-mono viq-text-muted">
-          Showing <strong>{filteredCenters.length}</strong> of {centers.length} Centers
+        <div className="flex items-center justify-between gap-3 text-xs font-mono viq-text-muted">
+          <button
+            type="button"
+            onClick={() => setShowInactiveCenters((current) => !current)}
+            className="viq-pill px-3 py-2 font-bold hover:border-orange-500 hover:text-orange-500 transition cursor-pointer whitespace-nowrap"
+          >
+            {showInactiveCenters ? 'Hide inactive' : 'Show inactive'} (
+            {centers.filter((center) => center.status === 'INACTIVE').length})
+          </button>
+          <span>
+            Showing <strong>{filteredCenters.length}</strong> of {visibleCenters.length}{' '}
+            {showInactiveCenters ? 'Centers' : 'Active Centers'}
+          </span>
         </div>
       </div>
 
@@ -317,7 +439,11 @@ export default function FranchiseCentersPage() {
                 <span className="viq-pill px-3 py-1 font-mono text-[10px] font-bold text-orange-500 border-orange-500/20">
                   {center.code}
                 </span>
-                <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 font-mono text-[10px] font-bold flex items-center gap-1 border border-emerald-500/20">
+                <span className={`px-2.5 py-1 rounded-full font-mono text-[10px] font-bold flex items-center gap-1 border ${
+                  center.status === 'ACTIVE'
+                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                    : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                }`}>
                   <CheckCircle2 className="w-3 h-3" />
                   <span>{center.status}</span>
                 </span>
@@ -358,11 +484,23 @@ export default function FranchiseCentersPage() {
               <div className="pt-2 flex items-center justify-end">
                 <button
                   type="button"
-                  onClick={() => handleDeleteCenter(center.id)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer"
-                  title="Deactivate Center"
+                  onClick={() => void handleToggleCenter(center)}
+                  disabled={updatingCenterId === center.id}
+                  className={`p-1.5 rounded-lg transition cursor-pointer disabled:opacity-50 ${
+                    center.status === 'ACTIVE'
+                      ? 'text-slate-400 hover:text-red-500 hover:bg-red-500/10'
+                      : 'text-emerald-500 hover:bg-emerald-500/10'
+                  }`}
+                  title={center.status === 'ACTIVE' ? 'Deactivate Center' : 'Reactivate Center'}
+                  aria-label={center.status === 'ACTIVE' ? 'Deactivate Center' : 'Reactivate Center'}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  {updatingCenterId === center.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : center.status === 'ACTIVE' ? (
+                    <Trash2 className="w-4 h-4" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>

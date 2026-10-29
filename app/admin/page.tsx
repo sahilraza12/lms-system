@@ -11,8 +11,6 @@ import {
   ArrowUpRight, 
   Filter,
   RefreshCw,
-  Building2,
-  CheckCircle2
 } from 'lucide-react';
 
 interface BranchMetric {
@@ -39,6 +37,7 @@ interface ApiCenterRecord {
   name: string;
   centerCode: string;
   royaltyRate?: number;
+  isActive?: boolean;
   address?: string | null;
   studentsCount?: number;
   _count?: { students?: number; teachers?: number };
@@ -48,48 +47,25 @@ interface ApiCenterRecord {
   billed?: number;
 }
 
-const DEFAULT_BRANCHES: BranchMetric[] = [
-  {
-    id: 'br-1',
-    name: 'VIQ Technologies - Khanna HQ',
-    code: 'VIQ-KHN-01',
-    city: 'Khanna',
-    studentsCount: 145,
-    collectedRevenue: 2610000,
-    pendingFees: 340000,
-    royaltyRate: 25,
-  },
-  {
-    id: 'br-2',
-    name: 'VIQ Technologies - Ludhiana Node',
-    code: 'VIQ-LDH-02',
-    city: 'Ludhiana',
-    studentsCount: 110,
-    collectedRevenue: 2090000,
-    pendingFees: 215000,
-    royaltyRate: 25,
-  },
-];
-
 export default function AdminDashboardPage() {
-  const [branches, setBranches] = useState<BranchMetric[]>(DEFAULT_BRANCHES);
+  const [branches, setBranches] = useState<BranchMetric[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('ALL');
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [royaltyDrafts, setRoyaltyDrafts] = useState<Record<string, string>>({});
   const [savingRoyaltyId, setSavingRoyaltyId] = useState<string | null>(null);
   const [royaltyError, setRoyaltyError] = useState('');
+  const [telemetryError, setTelemetryError] = useState('');
 
   // Interactive Revenue Simulator States
   const [simStudents, setSimStudents] = useState<number>(120);
   const [simAvgFee, setSimAvgFee] = useState<number>(20000);
-  const [simRoyaltyPct, setSimRoyaltyPct] = useState<number>(25);
-  const [simBranchCount, setSimBranchCount] = useState<number>(2);
 
   // Resilient telemetry fetcher with dual-endpoint fallback
   const loadAdminTelemetry = async (isManual = false) => {
     try {
       if (isManual) setRefreshing(true);
+      setTelemetryError('');
       
       // Attempt primary admin overview telemetry endpoint first
       let res = await fetch('/api/admin/overview', { cache: 'no-store' });
@@ -105,8 +81,10 @@ export default function AdminDashboardPage() {
         // Handle both response shapes: { topCenters } or { centers }
         const centerList: ApiCenterRecord[] = data.topCenters || data.centers || [];
         
-        if (Array.isArray(centerList) && centerList.length > 0) {
-          const mapped: BranchMetric[] = centerList.map((c, idx) => {
+        if (Array.isArray(centerList)) {
+          const mapped: BranchMetric[] = centerList
+            .filter((center) => center.isActive !== false)
+            .map((c, idx) => {
             let collected = Number(c.collected ?? 0);
             let pending = Number(c.balance ?? 0);
 
@@ -136,11 +114,22 @@ export default function AdminDashboardPage() {
 
           setBranches(mapped);
           setRoyaltyDrafts({});
-          setSimBranchCount(mapped.length || 2);
+          setSelectedBranchId((current) =>
+            current === 'ALL' || mapped.some((branch) => branch.id === current)
+              ? current
+              : 'ALL'
+          );
+        } else {
+          throw new Error('Admin telemetry response did not contain a center list.');
         }
+      } else {
+        throw new Error('Failed to fetch admin telemetry.');
       }
     } catch (err: unknown) {
-      console.warn('Administrative telemetry fetch failed, maintaining active cache:', err);
+      console.error('Administrative telemetry fetch failed:', err);
+      setTelemetryError(
+        err instanceof Error ? err.message : 'Failed to load admin dashboard data.'
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -217,8 +206,19 @@ export default function AdminDashboardPage() {
 
   // Projection Engine Calculations
   const singleBranchGross = simStudents * simAvgFee;
-  const networkGross = singleBranchGross * (selectedBranchId === 'ALL' ? simBranchCount : 1);
-  const hqRoyaltyShare = Math.round((networkGross * simRoyaltyPct) / 100);
+  const projectedBranchCount = selectedBranchId === 'ALL' ? activeBranches.length : 1;
+  const networkGross = singleBranchGross * projectedBranchCount;
+  const hqRoyaltyShare = activeBranches.reduce(
+    (total, branch) =>
+      total + Math.round((singleBranchGross * branch.royaltyRate) / 100),
+    0
+  );
+  const projectedRoyaltyPct = activeBranches.length
+    ? Math.round(
+        activeBranches.reduce((total, branch) => total + branch.royaltyRate, 0) /
+          activeBranches.length
+      )
+    : 0;
   const centerNetRetained = networkGross - hqRoyaltyShare;
 
   return (
@@ -269,6 +269,12 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </div>
+
+      {telemetryError && (
+        <p role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs font-semibold text-red-400">
+          {telemetryError}
+        </p>
+      )}
 
       {/* 2. Key Telemetry Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -386,35 +392,17 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
               <div>
                 <div className="flex justify-between text-xs mb-2 font-bold">
-                  <span className="viq-text-secondary">HQ Royalty Split (%)</span>
-                  <span className="font-mono text-amber-500">{simRoyaltyPct}%</span>
+                  <span className="viq-text-secondary">Configured HQ Royalty Rate</span>
+                  <span className="font-mono text-amber-500">{projectedRoyaltyPct}% avg.</span>
                 </div>
-                <input
-                  type="range"
-                  min={10}
-                  max={50}
-                  step={5}
-                  value={simRoyaltyPct}
-                  onChange={(e) => setSimRoyaltyPct(Number(e.target.value))}
-                  className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                />
               </div>
 
               {selectedBranchId === 'ALL' && (
                 <div>
                   <div className="flex justify-between text-xs mb-2 font-bold">
-                    <span className="viq-text-secondary">Number of Branches</span>
-                    <span className="font-mono text-indigo-400">{simBranchCount} Centers</span>
+                    <span className="viq-text-secondary">Active Franchise Branches</span>
+                    <span className="font-mono text-indigo-400">{projectedBranchCount} Centers</span>
                   </div>
-                  <input
-                    type="range"
-                    min={1}
-                    max={25}
-                    step={1}
-                    value={simBranchCount}
-                    onChange={(e) => setSimBranchCount(Number(e.target.value))}
-                    className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                  />
                 </div>
               )}
             </div>
@@ -434,7 +422,7 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[var(--border-color)]">
               <div>
                 <span className="text-[10px] font-mono uppercase viq-text-muted block font-bold">
-                  HQ Royalty ({simRoyaltyPct}%)
+                  HQ Royalty (center-specific rates)
                 </span>
                 <p className="text-base sm:text-lg font-black text-orange-500 font-mono mt-0.5">
                   ₹{hqRoyaltyShare.toLocaleString('en-IN')}

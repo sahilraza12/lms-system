@@ -16,20 +16,42 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const centers = await db.center.findMany({
-      include: {
-        user: { select: { email: true } },
-        _count: {
-          select: {
-            teachers: true,
-            students: true,
+    const [centers, feePlans] = await Promise.all([
+      db.center.findMany({
+        include: {
+          user: { select: { email: true } },
+          _count: {
+            select: {
+              teachers: true,
+              students: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
+      }),
+      db.feePlan.findMany({
+        select: {
+          paidAmount: true,
+          student: { select: { centerId: true } },
+        },
+      }),
+    ]);
+
+    const collectedByCenter = new Map<string, number>();
+    feePlans.forEach((plan) => {
+      collectedByCenter.set(
+        plan.student.centerId,
+        (collectedByCenter.get(plan.student.centerId) ?? 0) + plan.paidAmount
+      );
     });
 
-    return NextResponse.json({ success: true, centers });
+    return NextResponse.json({
+      success: true,
+      centers: centers.map((center) => ({
+        ...center,
+        totalCollected: collectedByCenter.get(center.id) ?? 0,
+      })),
+    });
   } catch (error: unknown) {
     console.error('Fetch Centers Error:', error);
     return NextResponse.json(
