@@ -1,8 +1,6 @@
 'use client';
 
-export const dynamic = "force-dynamic";
-
-import React, { useEffect, useState, useCallback, useTransition } from 'react';
+import React, { useEffect, useState, useCallback, useTransition, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { 
   Wallet, 
@@ -35,7 +33,7 @@ interface FeeLedgerEntry {
   status: 'CLEARED' | 'EMI_ACTIVE' | 'UNPAID';
 }
 
-export default function AdminFeesPage() {
+function AdminFeesContent() {
   const searchParams = useSearchParams();
   const [fees, setFees] = useState<FeeLedgerEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -297,7 +295,6 @@ export default function AdminFeesPage() {
                       </span>
                     </td>
                     <td className="py-4 px-6 text-right space-x-2">
-                      {/* Collect installment button */}
                       {f.balanceDue > 0 && (
                         <button
                           type="button"
@@ -313,7 +310,6 @@ export default function AdminFeesPage() {
                         </button>
                       )}
 
-                      {/* Receipt Link: Only rendered when valid voucher ID exists */}
                       {f.latestReceiptId ? (
                         <Link
                           href={`/receipt/${f.latestReceiptId}`}
@@ -466,5 +462,22 @@ export default function AdminFeesPage() {
       )}
 
     </div>
+  );
+}
+
+export default function AdminFeesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="py-20 text-center viq-card border border-[var(--border-color)] rounded-2xl space-y-3">
+          <Loader2 className="w-7 h-7 animate-spin mx-auto text-orange-500" />
+          <p className="text-xs font-mono text-slate-400 uppercase tracking-widest">
+            Loading Fee Management...
+          </p>
+        </div>
+      }
+    >
+      <AdminFeesContent />
+    </Suspense>
   );
 }
