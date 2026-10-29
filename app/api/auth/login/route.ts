@@ -76,28 +76,6 @@ export async function POST(req: Request) {
       });
     }
 
-    // =========================================================================
-    // AUTO-PROVISION / AUTO-HEAL ADMIN FALLBACK (FOR ZERO-FRICTION PROD SETUP)
-    // =========================================================================
-    const isAdminTarget = identifier.toLowerCase() === 'admin@viqtech.in';
-
-    if (isAdminTarget && (!user || !(await bcrypt.compare(password, user.password)))) {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      user = await db.user.upsert({
-        where: { email: 'admin@viqtech.in' },
-        update: {
-          password: hashedPassword,
-          role: 'ADMIN' as any,
-        },
-        create: {
-          email: 'admin@viqtech.in',
-          password: hashedPassword,
-          role: 'ADMIN' as any,
-        },
-        include: userInclude,
-      });
-    }
-
     if (!user) {
       return NextResponse.json(
         { error: 'Invalid email or password credentials.' },
