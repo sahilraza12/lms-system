@@ -5,13 +5,12 @@ import { getCurrentUser } from '@/lib/auth';
 import { FeeType, PaymentStatus } from '@prisma/client';
 import { sendPaymentReceiptEmail } from '@/lib/mail';
 
-// Helper to reliably get centerId
+// Logged-in Center ID nikalne ke liye helper
 async function getAuthenticatedCenterId() {
   const user = await getCurrentUser();
   if (!user) return null;
 
   const userRole = (user as any)?.role;
-  // Support both 'CENTER' and 'CENTER_ADMIN'
   if (userRole !== 'CENTER_ADMIN' && userRole !== 'CENTER') {
     return null;
   }
@@ -37,7 +36,7 @@ async function getAuthenticatedCenterId() {
   return centerRecord?.id || null;
 }
 
-// 1. Get all students enrolled under this center
+// 1. GET: Center ke sabhi enrolled students fetch karna
 export async function GET() {
   try {
     const centerId = await getAuthenticatedCenterId();
@@ -79,7 +78,7 @@ export async function GET() {
   }
 }
 
-// 2. Register/Admit new student under this center
+// 2. POST: New student admission enroll karna (Bina Transaction Timeout Trap ke)
 export async function POST(req: Request) {
   try {
     const centerId = await getAuthenticatedCenterId();
@@ -87,47 +86,99 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized: Center access only' }, { status: 401 });
     }
 
-    const body = await req.json();
+    const body = await req.json().catch(() => null);
+    if (!body) {
+      return NextResponse.json({ error: 'Invalid admission payload' }, { status: 400 });
+    }
+
     const {
       fullName,
+      candidateName,
+      name,
       email,
       password,
-      studentCode,
       phone,
       dob,
       gender,
       address,
-      courseId,
+      courseId: rawCourseId,
+      course: rawCourseName,
+      courseName,
       teacherId,
+      instructorId,
       totalAmount,
+      totalFee,
       downPayment,
+      paidAmount,
       installmentCount,
       paymentMode = 'CASH',
     } = body;
 
-    if (!fullName || !email || !password || !studentCode || !courseId || totalAmount === undefined) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    const studentFullName = (fullName || candidateName || name || '').trim();
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const studentPassword = password || '12345678';
+
+    if (!studentFullName || !cleanEmail) {
+      return NextResponse.json({ error: 'Student full name and official email are required.' }, { status: 400 });
     }
 
-    const cleanEmail = email.trim().toLowerCase();
+    // Course ID resolve karna
+    let resolvedCourseId = rawCourseId;
+    if (!resolvedCourseId || resolvedCourseId === 'Select Course...') {
+      const searchTitle = rawCourseName || courseName || 'AI & Machine Learning';
+      const foundCourse = await db.course.findFirst({
+        where: {
+          OR: [
+            { id: searchTitle },
+            { title: { contains: searchTitle, mode: 'insensitive' } },
+            { courseCode: { contains: searchTitle, mode: 'insensitive' } } as any,
+          ],
+        },
+      });
+
+      if (foundCourse) {
+        resolvedCourseId = foundCourse.id;
+      } else {
+        const anyCourse = await db.course.findFirst();
+        if (anyCourse) {
+          resolvedCourseId = anyCourse.id;
+        } else {
+          const createdCourse = await db.course.create({
+            data: {
+              title: searchTitle,
+              courseCode: 'COURSE-' + Math.floor(100 + Math.random() * 900),
+              durationMonths: 6,
+              fee: Number(totalAmount || totalFee || 25000),
+            } as any,
+          });
+          resolvedCourseId = createdCourse.id;
+        }
+      }
+    }
 
     // Check duplicate email
     const existingUser = await db.user.findUnique({ where: { email: cleanEmail } });
     if (existingUser) {
-      return NextResponse.json({ error: 'Email already registered' }, { status: 400 });
+      return NextResponse.json({ error: `An account with email "${cleanEmail}" is already registered.` }, { status: 400 });
     }
 
-    // Check duplicate studentCode
-    const existingStudent = await db.student.findUnique({ where: { studentCode } });
-    if (existingStudent) {
-      return NextResponse.json({ error: 'Student code already exists' }, { status: 400 });
+    // Auto-generate student code/roll number agar form se na aaye
+    let studentCode = body.studentCode?.trim();
+    if (!studentCode) {
+      const studentCount = await db.student.count();
+      const centerData = await db.center.findUnique({
+        where: { id: centerId },
+        select: { centerCode: true },
+      });
+      const prefix = centerData?.centerCode || 'VIQ';
+      studentCode = `${prefix}-STU-${(studentCount + 1).toString().padStart(4, '0')}`;
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const parsedTotalAmount = Math.max(0, Number(totalAmount) || 0);
-    const initialPaid = Math.max(0, Number(downPayment) || 0);
+    const hashedPassword = await bcrypt.hash(studentPassword, 10);
+    const parsedTotalAmount = Math.max(0, Number(totalAmount ?? totalFee ?? 0));
+    const initialPaid = Math.max(0, Number(downPayment ?? paidAmount ?? 0));
     const remainingBalance = Math.max(0, parsedTotalAmount - initialPaid);
-    const numInstallments = parseInt(installmentCount, 10) || 1;
+    const numInstallments = parseInt(installmentCount, 10) || (remainingBalance > 0 ? 2 : 1);
     const isEMI = numInstallments > 1 && remainingBalance > 0;
 
     let feeStatus: PaymentStatus = PaymentStatus.PENDING;
@@ -137,103 +188,96 @@ export async function POST(req: Request) {
       feeStatus = PaymentStatus.PARTIAL;
     }
 
-    const studentDob = dob ? new Date(dob) : new Date('2000-01-01');
+    const studentDob = dob ? new Date(dob) : new Date('2002-01-01');
 
-    // Generate unique Receipt Number if down payment exists
+    // Receipt number generate karna
     const currentYear = new Date().getFullYear();
-    const paymentCount = await db.payment.count();
+    const paymentCount = await db.payment.count().catch(() => 0);
     const receiptNo = `REC-${currentYear}-${(paymentCount + 1).toString().padStart(4, '0')}`;
 
-    // Create User, Student, FeePlan, Down Payment & Installments in single transaction
-    const result = await db.$transaction(async (tx) => {
-      const userRecord = await tx.user.create({
-        data: {
-          email: cleanEmail,
-          password: hashedPassword,
-          role: 'STUDENT',
-          student: {
-            create: {
-              fullName,
-              studentCode,
-              phone: phone || '',
-              dob: studentDob,
-              gender: gender || 'Not Specified',
-              address: address || '',
-              centerId,
-              courseId,
-              teacherId: teacherId || null,
-            },
+    const assignedFacultyId = teacherId || instructorId || null;
+
+    // 1. User + Student Record create karna (Sequential - no transaction timeout)
+    const userRecord = await db.user.create({
+      data: {
+        email: cleanEmail,
+        password: hashedPassword,
+        role: 'STUDENT',
+        student: {
+          create: {
+            fullName: studentFullName,
+            studentCode,
+            phone: phone || '',
+            dob: studentDob,
+            gender: gender || 'Not Specified',
+            address: address || '',
+            centerId,
+            courseId: resolvedCourseId,
+            teacherId: assignedFacultyId && assignedFacultyId !== 'Select Instructor...' ? assignedFacultyId : null,
           },
         },
-        include: {
-          student: true,
-        },
-      });
+      },
+      include: {
+        student: true,
+      },
+    });
 
-      const studentId = userRecord.student!.id;
+    const studentId = userRecord.student!.id;
 
-      // 1. Create Fee Plan
-      const createdFeePlan = await tx.feePlan.create({
+    // 2. Fee Plan create karna
+    const createdFeePlan = await db.feePlan.create({
+      data: {
+        studentId,
+        type: isEMI ? FeeType.EMI : FeeType.ONE_TIME,
+        totalAmount: parsedTotalAmount,
+        paidAmount: initialPaid,
+        balance: remainingBalance,
+        status: feeStatus,
+      },
+    });
+
+    // 3. Down payment record agar amount > 0
+    if (initialPaid > 0) {
+      await db.payment.create({
         data: {
-          studentId,
-          type: isEMI ? FeeType.EMI : FeeType.ONE_TIME,
-          totalAmount: parsedTotalAmount,
-          paidAmount: initialPaid,
-          balance: remainingBalance,
-          status: feeStatus,
+          feePlanId: createdFeePlan.id,
+          amount: initialPaid,
+          mode: paymentMode,
+          receiptNo,
         },
       });
+    }
 
-      // 2. If downPayment > 0, create explicit Payment transaction record
-      let initialPaymentRecord = null;
-      if (initialPaid > 0) {
-        initialPaymentRecord = await tx.payment.create({
+    // 4. Installments create karna
+    if (isEMI) {
+      const roundedInstallment = Math.round((remainingBalance / numInstallments) * 100) / 100;
+      const baseDate = new Date();
+
+      for (let i = 1; i <= numInstallments; i++) {
+        const dueDate = new Date(baseDate);
+        dueDate.setMonth(baseDate.getMonth() + i);
+
+        const currentInstallmentAmount =
+          i === numInstallments
+            ? Math.round((remainingBalance - roundedInstallment * (numInstallments - 1)) * 100) / 100
+            : roundedInstallment;
+
+        await db.installment.create({
           data: {
             feePlanId: createdFeePlan.id,
-            amount: initialPaid,
-            mode: paymentMode,
-            receiptNo,
+            amount: currentInstallmentAmount,
+            dueDate,
+            status: PaymentStatus.PENDING,
           },
         });
       }
+    }
 
-      // 3. Generate Installments if remaining balance exists
-      if (isEMI) {
-        const roundedInstallment = Math.round((remainingBalance / numInstallments) * 100) / 100;
-        const baseDate = new Date();
-
-        for (let i = 1; i <= numInstallments; i++) {
-          const dueDate = new Date(baseDate);
-          dueDate.setMonth(baseDate.getMonth() + i);
-
-          // Adjust last installment to prevent fractional roundoff difference
-          const currentInstallmentAmount =
-            i === numInstallments
-              ? Math.round((remainingBalance - roundedInstallment * (numInstallments - 1)) * 100) / 100
-              : roundedInstallment;
-
-          await tx.installment.create({
-            data: {
-              feePlanId: createdFeePlan.id,
-              amount: currentInstallmentAmount,
-              dueDate,
-              status: PaymentStatus.PENDING,
-            },
-          });
-        }
-      }
-
-      return {
-        userRecord,
-        initialPaymentRecord,
-      };
-    });
-
-    // 4. Send email receipt asynchronously if initial down payment was made
+    // 5. Down payment hone par receipt email send karna
     if (initialPaid > 0) {
       sendPaymentReceiptEmail({
         toEmail: cleanEmail,
-        studentName: fullName,
+        studentName: studentFullName,
         amountReceived: initialPaid,
         outstandingBalance: remainingBalance,
         receiptNumber: receiptNo,
@@ -243,8 +287,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Student admitted and enrolled successfully',
-      student: result.userRecord.student,
+      message: `Candidate ${studentFullName} successfully enrolled. Roll: ${studentCode}`,
+      student: userRecord.student,
       receiptNo: initialPaid > 0 ? receiptNo : null,
     });
   } catch (error: unknown) {

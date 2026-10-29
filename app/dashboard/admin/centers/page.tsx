@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import BrandLogo from '@/components/brand/BrandLogo';
 import { 
   Building2, 
   Plus, 
@@ -60,6 +61,7 @@ export default function AdminCentersPage() {
   const [centerCode, setCenterCode] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
+  const [royaltyRate, setRoyaltyRate] = useState(25);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -142,6 +144,7 @@ export default function AdminCentersPage() {
           centerCode: centerCode.trim().toUpperCase(),
           address: address.trim(),
           phone: phone.trim(),
+          royaltyRate,
           email: email.trim().toLowerCase(),
           password,
         }),
@@ -157,6 +160,7 @@ export default function AdminCentersPage() {
       setCenterCode('');
       setAddress('');
       setPhone('');
+      setRoyaltyRate(25);
       setEmail('');
       setPassword('');
       setIsModalOpen(false);
@@ -198,9 +202,7 @@ export default function AdminCentersPage() {
       {/* 1. Mobile Standalone Header (Ensures immediate responsive toggle even without layout fix) */}
       <div className="lg:hidden flex items-center justify-between p-4 bg-[#0B0F17] border-b border-slate-800 sticky top-0 z-40 w-full">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-orange-500 text-black font-black flex items-center justify-center text-xs shadow-md shadow-orange-500/20">
-            VIQ
-          </div>
+          <BrandLogo size={36} />
           <div>
             <span className="font-bold text-sm text-white block leading-tight">VIQ HQ</span>
             <span className="text-[9px] font-mono text-orange-400 uppercase font-semibold">Franchise Desk</span>
@@ -564,6 +566,25 @@ export default function AdminCentersPage() {
                     placeholder="+91 98765 43210"
                     className="w-full px-3 py-2 bg-slate-950 border rounded-xl border-slate-800 focus:outline-none focus:border-orange-500 font-mono text-slate-100 placeholder-slate-600"
                   />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">
+                    Royalty Rate (%)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={royaltyRate}
+                    onChange={(e) => setRoyaltyRate(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-950 border rounded-xl border-slate-800 focus:outline-none focus:border-orange-500 text-slate-100"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    HQ royalty percentage for this center. Default is 25%.
+                  </p>
                 </div>
 
                 <div className="border-t border-slate-800 pt-3 space-y-3">

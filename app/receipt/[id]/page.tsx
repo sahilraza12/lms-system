@@ -2,6 +2,7 @@
 
 import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
+import BrandLogo from '@/components/brand/BrandLogo';
 import { 
   Printer, 
   ArrowLeft, 
@@ -231,9 +232,7 @@ function ReceiptVoucherContent() {
         <div className="flex flex-col sm:flex-row justify-between items-start gap-6 border-b border-slate-200 pb-8">
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-orange-500 text-black font-black text-base flex items-center justify-center shadow-md">
-                VIQ
-              </div>
+              <BrandLogo size={52} />
               <div>
                 <h1 className="font-black text-xl tracking-tight text-slate-950 uppercase">
                   VIQ TECHNOLOGIES

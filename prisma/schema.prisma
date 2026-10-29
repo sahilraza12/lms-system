@@ -100,6 +100,7 @@ model Center {
   authorizedPerson String
   phone            String
   address          String
+  royaltyRate      Int      @default(25)
   isActive         Boolean  @default(true)
 
   userId           String   @unique

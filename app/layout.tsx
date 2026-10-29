@@ -15,9 +15,19 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'EduNexus — Autonomous Learning & Institutional ERP Cloud',
+  title: 'VIQ Technologies | Learning & Institutional ERP',
   description:
-    'Next-generation multi-tenant skill ecosystem with role-isolated workspaces, live lab evaluations, and SHA-256 cryptographic credentials.',
+    'VIQ Technologies learning and institutional ERP platform for students, teachers, centers, and administrators.',
+  icons: {
+    icon: [
+      {
+        url: '/logonavbar1-CCdzKR7I.png',
+        type: 'image/png',
+      },
+    ],
+    shortcut: '/logonavbar1-CCdzKR7I.png',
+    apple: '/logonavbar1-CCdzKR7I.png',
+  },
 };
 
 export default function RootLayout({

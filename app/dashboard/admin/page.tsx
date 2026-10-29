@@ -22,6 +22,7 @@ interface MetricSummary {
   totalBilled: number;
   totalCollected: number;
   totalBalance: number;
+  totalHqRoyalty: number;
   recoveryRate: number;
 }
 
@@ -29,11 +30,13 @@ interface CenterPerformance {
   id: string;
   name: string;
   centerCode: string;
+  royaltyRate: number;
   studentsCount: number;
   teachersCount: number;
   billed: number;
   collected: number;
   balance: number;
+  hqRoyalty: number;
   recoveryRate: number;
 }
 
@@ -95,17 +98,26 @@ export default function AdminDashboardPage() {
               totalBilled: Number(json.stats.totalBilled || 0),
               totalCollected: Number(json.stats.totalCollected || 0),
               totalBalance: Number(json.stats.totalBalance || 0),
+              totalHqRoyalty: json.centerBreakdowns.reduce(
+                (sum: number, center: any) =>
+                  sum + Math.round((Number(center.collected || 0) * Number(center.royaltyRate ?? 25)) / 100),
+                0
+              ),
               recoveryRate: Number(json.stats.overallRecoveryRate || 0),
             },
             topCenters: json.centerBreakdowns.map((c: any) => ({
               id: c.id,
               name: c.name,
               centerCode: c.code,
+              royaltyRate: Number(c.royaltyRate ?? 25),
               studentsCount: Number(c.enrolledCount || 0),
               teachersCount: 2,
               billed: Number(c.billed || 0),
               collected: Number(c.collected || 0),
               balance: Number(c.balance || 0),
+              hqRoyalty: Math.round(
+                (Number(c.collected || 0) * Number(c.royaltyRate ?? 25)) / 100
+              ),
               recoveryRate: Number(c.recoveryRate || 0),
             })),
           };
@@ -135,6 +147,8 @@ export default function AdminDashboardPage() {
         students: 0,
         centersCount: 0,
         recoveryRate: 0,
+        hqRoyalty: 0,
+        royaltyRate: null as number | null,
       };
     }
 
@@ -146,6 +160,8 @@ export default function AdminDashboardPage() {
         students: data.metrics.studentsCount,
         centersCount: data.metrics.centersCount,
         recoveryRate: data.metrics.recoveryRate,
+        hqRoyalty: data.metrics.totalHqRoyalty,
+        royaltyRate: null as number | null,
       };
     }
 
@@ -158,6 +174,8 @@ export default function AdminDashboardPage() {
         students: data.metrics.studentsCount,
         centersCount: 1,
         recoveryRate: data.metrics.recoveryRate,
+        hqRoyalty: data.metrics.totalHqRoyalty,
+        royaltyRate: null as number | null,
       };
     }
 
@@ -168,6 +186,8 @@ export default function AdminDashboardPage() {
       students: branch.studentsCount,
       centersCount: 1,
       recoveryRate: branch.recoveryRate,
+      hqRoyalty: branch.hqRoyalty,
+      royaltyRate: branch.royaltyRate,
     };
   }, [data, selectedBranch]);
 
@@ -281,9 +301,13 @@ export default function AdminDashboardPage() {
               <TrendingUp className="w-4 h-4 text-orange-400" />
             </div>
             <p className="text-2xl sm:text-3xl font-black text-orange-500 font-mono tracking-tight">
-              ₹{loading ? '...' : Math.round(filteredMetrics.collected * 0.25).toLocaleString('en-IN')}
+              ₹{loading ? '...' : filteredMetrics.hqRoyalty.toLocaleString('en-IN')}
             </p>
-            <span className="text-[11px] text-slate-400 block font-medium">Direct Institutional Share (25%)</span>
+            <span className="text-[11px] text-slate-400 block font-medium">
+              {filteredMetrics.royaltyRate === null
+                ? 'Based on center-specific deal rates'
+                : `Center deal: ${filteredMetrics.royaltyRate}%`}
+            </span>
           </div>
 
           <div className="p-5 rounded-2xl bg-[#0D111A] border border-white/10 shadow-md space-y-2 relative overflow-hidden">

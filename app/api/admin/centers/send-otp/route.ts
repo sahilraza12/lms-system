@@ -13,12 +13,14 @@ if (!global.__centerOtpStore) {
 
 const otpStore = global.__centerOtpStore;
 
-// Transporter configuration
+// Exact aapke .env file ke names (SMTP_*) ke sath transporter setup
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: Number(process.env.SMTP_PORT) || 587,
+  secure: false, // Port 587 par STARTTLS ke liye false rehta hai
   auth: {
-    user: process.env.EMAIL_SERVER_USER,
-    pass: process.env.EMAIL_SERVER_PASSWORD,
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS?.replace(/\s+/g, ''), // Spaces safe remove
   },
 });
 
@@ -35,7 +37,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Manager official email and center code are required.' }, { status: 400 });
     }
 
-    // Edge Case: Check for existing center code
+    // 1. Check for existing center code
     const existingCenter = await db.center.findUnique({
       where: { centerCode: centerCode.trim().toUpperCase() },
     });
@@ -44,7 +46,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Branch Code "${centerCode}" is already registered.` }, { status: 409 });
     }
 
-    // Edge Case: Check for existing user email
+    // 2. Check for existing user email
     const existingUser = await db.user.findUnique({
       where: { email: email.trim().toLowerCase() },
     });
@@ -53,16 +55,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `An account with email "${email}" already exists.` }, { status: 409 });
     }
 
-    // Generate 6-digit random code
+    // 3. Generate 6-digit random code
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes expiry
 
     // Save in storage
     otpStore.set(email.trim().toLowerCase(), { code: otpCode, expiresAt });
 
-    // Send Real Email to Official ID
+    // 4. Send Email directly using SMTP_USER
     await transporter.sendMail({
-      from: process.env.EMAIL_FROM,
+      from: `"VIQ Technologies" <${process.env.SMTP_USER}>`,
       to: email.trim().toLowerCase(),
       subject: `[VIQ HQ] Security OTP for Center Node ${centerCode.toUpperCase()}`,
       html: `

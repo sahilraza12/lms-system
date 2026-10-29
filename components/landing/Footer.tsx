@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ShieldCheck, ArrowUpRight } from 'lucide-react';
+import BrandLogo from '@/components/brand/BrandLogo';
 
 export default function Footer() {
   return (
@@ -11,9 +12,7 @@ export default function Footer() {
         {/* Brand */}
         <div className="space-y-3 max-w-sm">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="viq-btn-primary w-8 h-8 rounded-lg flex items-center justify-center font-black text-[10px]">
-              VIQ
-            </div>
+            <BrandLogo size={48} />
             <span className="text-lg font-black tracking-tight">
               VIQ <span style={{ color: '#f97316' }}>Technologies</span>
             </span>

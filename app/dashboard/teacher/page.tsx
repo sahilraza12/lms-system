@@ -16,6 +16,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import ThemeToggle from '@/components/theme/ThemeToggle';
+import BrandLogo from '@/components/brand/BrandLogo';
 
 interface StudentItem {
   id: string;
@@ -121,14 +122,17 @@ function TeacherBatchContent() {
     <div className="teacher-portal-theme min-h-screen bg-slate-950 text-slate-100 font-sans p-4 sm:p-8 space-y-7 selection:bg-orange-500 selection:text-white">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
-            <span>Faculty Cohort & Attendance Register</span>
-            <Sparkles className="w-5 h-5 text-orange-400" />
-          </h1>
-          <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-            Monitor assigned students, verify roll call, and sync daily class participation.
-          </p>
+        <div className="flex items-center gap-3">
+          <BrandLogo size={52} />
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
+              <span>Faculty Cohort & Attendance Register</span>
+              <Sparkles className="w-5 h-5 text-orange-400" />
+            </h1>
+            <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+              Monitor assigned students, verify roll call, and sync daily class participation.
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <ThemeToggle />

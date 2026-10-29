@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import BrandLogo from '@/components/brand/BrandLogo';
 import { 
   ShieldCheck, 
   Search, 
@@ -94,13 +95,18 @@ function VerifyCertificateContent() {
 
       {/* Top Navigation */}
       <div className="relative z-10 max-w-5xl w-full mx-auto flex items-center justify-between">
-        <Link
-          href="/"
-          className="viq-pill inline-flex items-center gap-2 px-4 py-2 text-xs font-bold transition hover:border-white/20"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Home</span>
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/" aria-label="VIQ Technologies home">
+            <BrandLogo size={44} />
+          </Link>
+          <Link
+            href="/"
+            className="viq-pill inline-flex items-center gap-2 px-4 py-2 text-xs font-bold transition hover:border-white/20"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Home</span>
+          </Link>
+        </div>
 
         <span className="flex items-center gap-1.5 text-[11px] font-mono text-emerald-500 font-bold">
           <Lock className="w-3.5 h-3.5" />

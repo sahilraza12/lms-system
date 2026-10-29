@@ -25,6 +25,7 @@ import {
   Trash2
 } from 'lucide-react';
 import ThemeToggle from '@/components/theme/ThemeToggle';
+import BrandLogo from '@/components/brand/BrandLogo';
 
 interface SubmissionItem {
   id: string;
@@ -230,9 +231,7 @@ export default function TeacherTasksPage() {
       <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-4 sm:px-8 py-3.5">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center font-black text-white text-base shadow-lg shadow-orange-500/20">
-              VIQ
-            </div>
+            <BrandLogo size={52} />
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-sm tracking-tight text-white">Faculty Mentor Workspace</span>

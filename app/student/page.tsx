@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import LogoutButton from '@/components/auth/LogoutButton';
 import ThemeToggle from '@/components/theme/ThemeToggle';
+import BrandLogo from '@/components/brand/BrandLogo';
 
 interface SubmissionData {
   id: string;
@@ -349,9 +350,7 @@ export default function StudentPortalPage() {
       {/* Top Header Navigation */}
       <header className="sticky top-0 z-40 h-16 bg-[#0a0d14]/90 backdrop-blur-md px-6 sm:px-12 flex items-center justify-between border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center font-black text-xs text-white shadow-lg shadow-orange-500/20">
-            VIQ
-          </div>
+          <BrandLogo size={48} />
           <div>
             <span className="text-sm font-bold block text-white">VIQ Learning Cloud</span>
             {student?.enrollmentNo && (

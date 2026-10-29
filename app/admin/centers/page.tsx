@@ -52,6 +52,7 @@ export default function FranchiseCentersPage() {
   const [managerName, setManagerName] = useState<string>('');
   const [managerEmail, setManagerEmail] = useState<string>('');
   const [managerPassword, setManagerPassword] = useState<string>('');
+  const [royaltyRate, setRoyaltyRate] = useState<number>(25);
 
   // OTP Verification State
   const [otpCode, setOtpCode] = useState<string>('');
@@ -163,6 +164,7 @@ export default function FranchiseCentersPage() {
           email: managerEmail.trim().toLowerCase(),
           password: managerPassword,
           managerName: managerName.trim(),
+          royaltyRate,
           otp: otpCode.trim(),
         }),
       });
@@ -192,6 +194,7 @@ export default function FranchiseCentersPage() {
     setManagerName('');
     setManagerEmail('');
     setManagerPassword('');
+    setRoyaltyRate(25);
     setOtpCode('');
   };
 
@@ -448,6 +451,25 @@ export default function FranchiseCentersPage() {
                       className="viq-input w-full px-4 py-2.5 font-mono uppercase"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-mono uppercase viq-text-muted font-bold block mb-1">
+                    Royalty Rate (%) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={royaltyRate}
+                    onChange={(e) => setRoyaltyRate(Number(e.target.value))}
+                    className="viq-input w-full px-4 py-2.5"
+                  />
+                  <p className="mt-1 text-[10px] viq-text-muted">
+                    HQ royalty percentage for this center. Default is 25%.
+                  </p>
                 </div>
 
                 <div className="pt-2 border-t border-[var(--border-color)] space-y-3">

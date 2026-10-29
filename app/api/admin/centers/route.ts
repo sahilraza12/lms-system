@@ -70,10 +70,22 @@ export async function POST(req: Request) {
       typeof input.authorizedPerson === 'string'
         ? input.authorizedPerson.trim()
         : '';
+    const royaltyRate = input.royaltyRate === undefined ? 25 : input.royaltyRate;
 
     if (!name || !centerCode || !email || !password) {
       return NextResponse.json(
         { error: 'Name, center code, email, and password are required.' },
+        { status: 400 }
+      );
+    }
+    if (
+      typeof royaltyRate !== 'number' ||
+      !Number.isInteger(royaltyRate) ||
+      royaltyRate < 0 ||
+      royaltyRate > 100
+    ) {
+      return NextResponse.json(
+        { error: 'Royalty rate must be a whole number between 0 and 100.' },
         { status: 400 }
       );
     }
@@ -118,6 +130,7 @@ export async function POST(req: Request) {
           authorizedPerson: authorizedPerson || name,
           phone: phone || 'Not Provided',
           address: address || 'Address not specified',
+          royaltyRate,
           userId: user.id,
         },
       });

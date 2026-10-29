@@ -10,11 +10,12 @@ export async function GET() {
     }
 
     // 1. Core metric counts
-    const [centersCount, studentsCount, teachersCount, coursesCount] = await Promise.all([
+    const [centersCount, studentsCount, teachersCount, coursesCount, centerRates] = await Promise.all([
       db.center.count(),
       db.student.count(),
       db.teacher.count(),
       db.course.count(),
+      db.center.findMany({ select: { id: true, royaltyRate: true } }),
     ]);
 
     // 2. Financial Aggregates
@@ -24,18 +25,30 @@ export async function GET() {
         paidAmount: true,
         balance: true,
         status: true,
+        student: { select: { centerId: true } },
       },
     });
 
     let totalBilled = 0;
     let totalCollected = 0;
     let totalBalance = 0;
+    const collectedByCenter = new Map<string, number>();
 
     feePlans.forEach((plan) => {
       totalBilled += plan.totalAmount;
       totalCollected += plan.paidAmount;
       totalBalance += plan.balance;
+      collectedByCenter.set(
+        plan.student.centerId,
+        (collectedByCenter.get(plan.student.centerId) ?? 0) + plan.paidAmount
+      );
     });
+    const royaltyRatesByCenter = new Map(centerRates.map((center) => [center.id, center.royaltyRate]));
+    const totalHqRoyalty = Array.from(collectedByCenter).reduce(
+      (total, [centerId, collected]) =>
+        total + Math.round((collected * (royaltyRatesByCenter.get(centerId) ?? 25)) / 100),
+      0
+    );
 
     const recoveryRate =
       totalBilled > 0 ? Math.round((totalCollected / totalBilled) * 100) : 100;
@@ -47,6 +60,7 @@ export async function GET() {
         id: true,
         name: true,
         centerCode: true,
+        royaltyRate: true,
         _count: {
           select: {
             students: true,
@@ -91,15 +105,16 @@ export async function GET() {
         id: c.id,
         name: c.name,
         centerCode: c.centerCode,
+        royaltyRate: c.royaltyRate,
         studentsCount: c._count.students,
         teachersCount: c._count.teachers,
         billed,
         collected,
         balance,
+        hqRoyalty: Math.round((collected * c.royaltyRate) / 100),
         recoveryRate: centerRecoveryRate,
       };
     });
-
     // 4. Recent Real-Time Inflow Stream (Last 6 verified payments)
     const recentPayments = await db.payment.findMany({
       take: 6,
@@ -144,9 +159,10 @@ export async function GET() {
         totalBilled,
         totalCollected,
         totalBalance,
+        totalHqRoyalty,
         recoveryRate,
       },
-      topCenters,
+      topCenters: topCenters.slice(0, 5),
       recentPayments,
       recentAnnouncements: recentAnnouncements.map((announcement) => ({
         ...announcement,

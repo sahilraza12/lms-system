@@ -17,6 +17,7 @@ import {
   Shield
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import BrandLogo from '@/components/brand/BrandLogo';
 
 interface TeacherItem {
   id: string;
@@ -122,9 +123,7 @@ export default function CenterDashboardPage() {
         <div>
           <div className="p-6 border-b border-white/10 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center font-black text-black text-xs shadow-lg shadow-orange-500/20">
-                VIQ
-              </div>
+              <BrandLogo size={44} />
               <div>
                 <h2 className="text-xs font-black tracking-tight text-white leading-none">Khanna Branch</h2>
                 <span className="text-[9px] font-mono text-orange-400 font-bold tracking-wider">VIQ-KHN-01 NODE</span>

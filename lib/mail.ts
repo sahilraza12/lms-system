@@ -1,40 +1,54 @@
 import nodemailer from 'nodemailer';
 
-const transporter = nodemailer.createTransport({
+// Resilient App Password normalization (removes unintentional spaces)
+const rawSmtpPass = process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '') : '';
+
+export const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
+  secure: false, // Port 587 requires STARTTLS
   auth: {
     user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS, // 16-character Google App Password
+    pass: rawSmtpPass,
   },
 });
 
+// Helper: Safety check before triggering socket
+function hasSmtpConfig(): boolean {
+  if (!process.env.SMTP_USER || !rawSmtpPass) {
+    console.warn('[MAILER WARNING] SMTP credentials not detected in environment variables.');
+    return false;
+  }
+  return true;
+}
+
 // 1. Email OTP Verification Dispatch
 export async function sendOtpEmail(toEmail: string, otp: string) {
+  if (!hasSmtpConfig()) return;
+
   const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: auto; padding: 28px; border: 1px solid #e2e8f0; border-radius: 14px; background: #ffffff;">
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: auto; padding: 28px; border: 1px solid #1e293b; border-radius: 16px; background: #07090E; color: #f8fafc;">
       <div style="border-bottom: 2px solid #f97316; padding-bottom: 14px; margin-bottom: 20px;">
-        <span style="font-size: 11px; font-weight: 800; color: #f97316; text-transform: uppercase; letter-spacing: 1.5px;">
+        <span style="font-size: 11px; font-weight: 800; color: #f97316; text-transform: uppercase; letter-spacing: 1.5px; font-family: monospace;">
           VIQ Technologies // Verification Terminal
         </span>
-        <h2 style="margin: 8px 0 0 0; color: #0f172a; font-size: 20px; font-weight: 800;">
+        <h2 style="margin: 8px 0 0 0; color: #ffffff; font-size: 20px; font-weight: 800;">
           Account Verification Code
         </h2>
       </div>
 
-      <p style="color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
-        Use the following one-time passcode (OTP) to verify your official email and complete your registration. This code is valid for <strong>10 minutes</strong>.
+      <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin-bottom: 22px;">
+        Use the following single-use authorization passcode (OTP) to authenticate your access. This code remains active for <strong>10 minutes</strong>.
       </p>
 
-      <div style="text-align: center; margin: 26px 0;">
-        <span style="display: inline-block; font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #f97316; background: #fff7ed; padding: 14px 28px; border-radius: 10px; border: 1px dashed #fdba74; font-family: monospace;">
+      <div style="text-align: center; margin: 28px 0;">
+        <span style="display: inline-block; font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #f97316; background: #131926; padding: 16px 32px; border-radius: 12px; border: 1px dashed #f97316; font-family: monospace;">
           ${otp}
         </span>
       </div>
 
-      <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin: 0;">
-        If you did not initiate this registration request, please disregard this email. Never disclose your credentials or security codes to anyone.
+      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin: 0;">
+        If you did not initiate this authentication request, disregard this transmission. Never disclose security tokens to any third party.
       </p>
     </div>
   `;
@@ -42,7 +56,7 @@ export async function sendOtpEmail(toEmail: string, otp: string) {
   return transporter.sendMail({
     from: `"VIQ Cloud Auth" <${process.env.SMTP_USER}>`,
     to: toEmail,
-    subject: `[VIQ Auth] Verification Code: ${otp}`,
+    subject: `[VIQ Auth] Security Verification Code: ${otp}`,
     html,
   });
 }
@@ -69,46 +83,48 @@ export async function sendPaymentReceiptEmail({
   receiptUrl,
   instituteName = 'VIQ Technologies',
 }: PaymentReceiptPayload) {
+  if (!hasSmtpConfig()) return;
+
   const formattedReceived = amountReceived.toLocaleString('en-IN');
   const formattedBalance = outstandingBalance.toLocaleString('en-IN');
   const viewReceiptUrl = receiptUrl || '#';
 
   const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 540px; margin: auto; padding: 28px; border: 1px solid #e2e8f0; border-radius: 14px; background: #ffffff;">
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 540px; margin: auto; padding: 28px; border: 1px solid #1e293b; border-radius: 16px; background: #07090E; color: #f8fafc;">
       <div style="border-bottom: 2px solid #10b981; padding-bottom: 14px; margin-bottom: 20px;">
-        <span style="font-size: 11px; font-weight: 800; color: #10b981; text-transform: uppercase; letter-spacing: 1.5px;">
+        <span style="font-size: 11px; font-weight: 800; color: #10b981; text-transform: uppercase; letter-spacing: 1.5px; font-family: monospace;">
           ${instituteName} // Fee Transaction Engine
         </span>
-        <h2 style="margin: 8px 0 0 0; color: #0f172a; font-size: 20px; font-weight: 800;">
+        <h2 style="margin: 8px 0 0 0; color: #ffffff; font-size: 20px; font-weight: 800;">
           Payment Confirmation Receipt
         </h2>
       </div>
 
-      <p style="color: #334155; font-size: 14px; line-height: 1.6; margin-bottom: 14px;">
+      <p style="color: #e2e8f0; font-size: 14px; line-height: 1.6; margin-bottom: 14px;">
         Dear <strong>${studentName}</strong>,
       </p>
 
-      <p style="color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
-        Payment of <strong>₹${formattedReceived}</strong> has been received successfully toward your course fee/EMI.
+      <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
+        Payment of <strong>₹${formattedReceived}</strong> has been successfully processed and accredited against your institutional ledger.
       </p>
 
-      <table style="width: 100%; border-collapse: collapse; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 24px;">
+      <table style="width: 100%; border-collapse: collapse; background: #0D111A; border: 1px solid #1e293b; border-radius: 12px; margin-bottom: 24px; overflow: hidden;">
         <tbody>
           <tr>
-            <td style="padding: 10px 14px; font-size: 13px; color: #64748b;">Receipt Number:</td>
-            <td style="padding: 10px 14px; font-size: 13px; color: #0f172a; font-family: monospace; font-weight: 700; text-align: right;">${receiptNumber}</td>
+            <td style="padding: 12px 16px; font-size: 13px; color: #64748b;">Receipt Number:</td>
+            <td style="padding: 12px 16px; font-size: 13px; color: #f8fafc; font-family: monospace; font-weight: 700; text-align: right;">${receiptNumber}</td>
           </tr>
           <tr>
-            <td style="padding: 10px 14px; font-size: 13px; color: #64748b;">Payment Mode:</td>
-            <td style="padding: 10px 14px; font-size: 13px; color: #0f172a; font-family: monospace; font-weight: 700; text-align: right;">${paymentMode}</td>
+            <td style="padding: 12px 16px; font-size: 13px; color: #64748b;">Payment Mode:</td>
+            <td style="padding: 12px 16px; font-size: 13px; color: #f8fafc; font-family: monospace; font-weight: 700; text-align: right;">${paymentMode}</td>
           </tr>
           <tr>
-            <td style="padding: 10px 14px; font-size: 13px; color: #64748b;">Amount Received:</td>
-            <td style="padding: 10px 14px; font-size: 13px; color: #10b981; font-family: monospace; font-weight: 800; text-align: right;">₹${formattedReceived}</td>
+            <td style="padding: 12px 16px; font-size: 13px; color: #64748b;">Amount Received:</td>
+            <td style="padding: 12px 16px; font-size: 13px; color: #10b981; font-family: monospace; font-weight: 800; text-align: right;">₹${formattedReceived}</td>
           </tr>
-          <tr style="border-top: 1px dashed #cbd5e1;">
-            <td style="padding: 10px 14px; font-size: 13px; color: #64748b;">Outstanding Balance:</td>
-            <td style="padding: 10px 14px; font-size: 13px; color: ${outstandingBalance > 0 ? '#ea580c' : '#10b981'}; font-family: monospace; font-weight: 800; text-align: right;">₹${formattedBalance}</td>
+          <tr style="border-top: 1px dashed #1e293b;">
+            <td style="padding: 12px 16px; font-size: 13px; color: #64748b;">Outstanding Balance:</td>
+            <td style="padding: 12px 16px; font-size: 13px; color: ${outstandingBalance > 0 ? '#f97316' : '#10b981'}; font-family: monospace; font-weight: 800; text-align: right;">₹${formattedBalance}</td>
           </tr>
         </tbody>
       </table>
@@ -116,8 +132,8 @@ export async function sendPaymentReceiptEmail({
       ${
         receiptUrl && receiptUrl !== '#'
           ? `
-        <div style="text-align: center; margin-bottom: 22px;">
-          <a href="${viewReceiptUrl}" style="background: #0f172a; color: #ffffff; text-decoration: none; padding: 11px 22px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-block;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <a href="${viewReceiptUrl}" style="background: #f97316; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-size: 13px; font-weight: 700; display: inline-block;">
             Download Official Receipt PDF
           </a>
         </div>
@@ -125,8 +141,8 @@ export async function sendPaymentReceiptEmail({
           : ''
       }
 
-      <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin: 0;">
-        Thank you for choosing ${instituteName}. For queries regarding your fee schedule, contact your branch coordinator.
+      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin: 0;">
+        Thank you for choosing ${instituteName}. For queries regarding installment schedules, connect with your regional cashier desk.
       </p>
     </div>
   `;
@@ -159,6 +175,8 @@ export async function sendEmiReminderEmail({
   instituteName = 'VIQ Technologies',
   remainingBalance,
 }: EmiAlertPayload) {
+  if (!hasSmtpConfig()) return;
+
   const urgencyLabel =
     daysRemaining <= 1
       ? 'URGENT: Due Tomorrow'
@@ -169,41 +187,37 @@ export async function sendEmiReminderEmail({
   const formattedAmount = installmentAmount.toLocaleString('en-IN');
 
   const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: auto; padding: 28px; border: 1px solid #fed7aa; border-radius: 14px; background: #ffffff;">
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: auto; padding: 28px; border: 1px solid #7c2d12; border-radius: 16px; background: #07090E; color: #f8fafc;">
       <div style="border-bottom: 2px solid #ea580c; padding-bottom: 12px; margin-bottom: 18px;">
-        <span style="font-size: 11px; font-weight: 800; color: #ea580c; text-transform: uppercase; letter-spacing: 1.5px;">
+        <span style="font-size: 11px; font-weight: 800; color: #ea580c; text-transform: uppercase; letter-spacing: 1.5px; font-family: monospace;">
           ${urgencyLabel}
         </span>
-        <h2 style="margin: 8px 0 0 0; color: #0f172a; font-size: 19px; font-weight: 800;">
+        <h2 style="margin: 8px 0 0 0; color: #ffffff; font-size: 19px; font-weight: 800;">
           Scheduled Course EMI Notification
         </h2>
       </div>
 
-      <p style="color: #334155; font-size: 14px; line-height: 1.6; margin-bottom: 16px;">
+      <p style="color: #e2e8f0; font-size: 14px; line-height: 1.6; margin-bottom: 16px;">
         Dear <strong>${studentName}</strong>,
       </p>
 
-      <p style="color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
-        This is a friendly reminder that an EMI installment of <strong style="color: #0f172a;">₹${formattedAmount}</strong> is scheduled for payment on <strong style="color: #ea580c;">${dueDate}</strong> (${daysRemaining} day${daysRemaining > 1 ? 's' : ''} remaining).
+      <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
+        An upcoming installment of <strong style="color: #ffffff;">₹${formattedAmount}</strong> is scheduled for payment on <strong style="color: #f97316;">${dueDate}</strong> (${daysRemaining} day${daysRemaining > 1 ? 's' : ''} remaining).
       </p>
 
-      <table style="width: 100%; border-collapse: collapse; background: #fff7ed; border-left: 4px solid #ea580c; border-radius: 6px; margin-bottom: 22px;">
-        <tbody>
-          <tr>
-            <td style="padding: 12px 14px; color: #9a3412; font-size: 13px; line-height: 1.5;">
-              Please clear the dues before the deadline to prevent batch access interruption.
-              ${
-                remainingBalance !== undefined
-                  ? `<div style="margin-top: 6px; font-size: 12px; color: #c2410c;">Total Pending Course Balance: <strong>₹${remainingBalance.toLocaleString('en-IN')}</strong></div>`
-                  : ''
-              }
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div style="background: #1c130d; border-left: 4px solid #ea580c; border-radius: 8px; padding: 14px; margin-bottom: 22px;">
+        <p style="margin: 0; color: #fdba74; font-size: 13px; line-height: 1.5;">
+          Please clear outstanding balances before deadline expiration to prevent batch suspension.
+        </p>
+        ${
+          remainingBalance !== undefined
+            ? `<div style="margin-top: 8px; font-size: 12px; color: #fb923c; font-family: monospace;">Total Pending Ledger Balance: <strong>₹${remainingBalance.toLocaleString('en-IN')}</strong></div>`
+            : ''
+        }
+      </div>
 
-      <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin: 0;">
-        ${instituteName} Financial Administration
+      <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin: 0;">
+        ${instituteName} Financial Operations Office
       </p>
     </div>
   `;
@@ -234,30 +248,30 @@ export async function sendNoticeBroadcastEmail({
   senderRole,
   portalUrl = 'https://portal.viqtechnologies.com',
 }: NoticeBroadcastPayload) {
-  if (!toEmails || toEmails.length === 0) return;
+  if (!hasSmtpConfig() || !toEmails || toEmails.length === 0) return;
 
   const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-      <div style="border-bottom: 2px solid #f97316; padding-bottom: 12px; margin-bottom: 20px;">
-        <span style="font-size: 11px; font-weight: 800; color: #f97316; text-transform: uppercase; letter-spacing: 1.5px;">
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: auto; padding: 28px; border: 1px solid #1e293b; border-radius: 16px; background: #07090E; color: #f8fafc;">
+      <div style="border-bottom: 2px solid #f97316; padding-bottom: 14px; margin-bottom: 20px;">
+        <span style="font-size: 11px; font-weight: 800; color: #f97316; text-transform: uppercase; letter-spacing: 1.5px; font-family: monospace;">
           VIQ Technologies // Official Circular
         </span>
-        <h2 style="margin: 8px 0 0 0; color: #0f172a; font-size: 20px; font-weight: 800;">
+        <h2 style="margin: 8px 0 0 0; color: #ffffff; font-size: 20px; font-weight: 800;">
           ${title}
         </h2>
       </div>
 
-      <div style="color: #334155; font-size: 14px; line-height: 1.65; margin-bottom: 24px; white-space: pre-line;">
+      <div style="color: #cbd5e1; font-size: 14px; line-height: 1.7; margin-bottom: 24px; white-space: pre-line;">
         ${content}
       </div>
 
-      <div style="background: #f8fafc; padding: 12px 16px; border-radius: 8px; font-size: 12px; color: #64748b; margin-bottom: 24px; border: 1px solid #f1f5f9;">
-        Issued By: <strong style="color: #0f172a;">${senderName}</strong> (${senderRole})
+      <div style="background: #0D111A; padding: 12px 18px; border-radius: 10px; font-size: 12px; color: #94a3b8; margin-bottom: 24px; border: 1px solid #1e293b;">
+        Authorized Dispatcher: <strong style="color: #ffffff;">${senderName}</strong> (${senderRole})
       </div>
 
       <div style="text-align: center;">
-        <a href="${portalUrl}" style="background: #f97316; color: #ffffff; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-block;">
-          Open Portal Desk
+        <a href="${portalUrl}" style="background: #f97316; color: #ffffff; text-decoration: none; padding: 11px 24px; border-radius: 10px; font-size: 13px; font-weight: 700; display: inline-block;">
+          Open Portal Terminal
         </a>
       </div>
     </div>
@@ -265,8 +279,9 @@ export async function sendNoticeBroadcastEmail({
 
   return transporter.sendMail({
     from: `"VIQ Academic Desk" <${process.env.SMTP_USER}>`,
+    to: process.env.SMTP_USER,
     bcc: toEmails,
-    subject: `[VIQ NOTICE] ${title}`,
+    subject: `[OFFICIAL CIRCULAR] ${title}`,
     html,
   });
 }

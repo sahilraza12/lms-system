@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import LogoutButton from '@/components/auth/LogoutButton';
 import ThemeToggle from '@/components/theme/ThemeToggle';
+import BrandLogo from '@/components/brand/BrandLogo';
 
 const navItems = [
   { name: 'HQ Overview & Revenue', href: '/admin', icon: LayoutDashboard },
@@ -60,9 +61,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
           <div className="flex items-center justify-between">
             <Link href="/admin" className="flex items-center gap-3 group">
-              <div className="viq-btn-primary w-9 h-9 rounded-xl flex items-center justify-center font-black text-[11px] group-hover:scale-105 transition-transform">
-                VIQ
-              </div>
+              <BrandLogo size={40} className="group-hover:scale-105 transition-transform" />
               <div>
                 <span className="text-base font-black tracking-tight block">
                   VIQ <span style={{ color: '#f97316' }}>HQ</span>

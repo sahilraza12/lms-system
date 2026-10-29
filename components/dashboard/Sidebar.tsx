@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import BrandLogo from '@/components/brand/BrandLogo';
 
 interface SidebarProps {
   role: 'SUPER_ADMIN' | 'ADMIN' | 'CENTER' | 'TEACHER' | 'STUDENT';
@@ -54,10 +55,15 @@ export default function Sidebar({ role, userName }: SidebarProps) {
       <div>
         {/* Brand Header */}
         <div className="px-3 py-4 border-b border-slate-800 mb-6">
-          <span className="text-xs font-black tracking-widest text-orange-500 uppercase">
-            VIQ Ecosystem
-          </span>
-          <h1 className="text-lg font-bold text-white tracking-tight">Cloud Portal</h1>
+          <div className="flex items-center gap-3 mb-3">
+            <BrandLogo size={44} />
+            <div>
+              <span className="text-xs font-black tracking-widest text-orange-500 uppercase">
+                VIQ Ecosystem
+              </span>
+              <h1 className="text-lg font-bold text-white tracking-tight">Cloud Portal</h1>
+            </div>
+          </div>
           <div className="mt-2 inline-block px-2 py-0.5 text-xs font-semibold rounded bg-slate-800 text-orange-400 border border-slate-700">
             {role}
           </div>

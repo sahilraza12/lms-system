@@ -69,7 +69,14 @@ export async function GET(req: Request) {
     // 1. Fetch Center Basic Info
     const centerInfo = await db.center.findUnique({
       where: { id: resolvedCenterId },
-      select: { id: true, name: true, centerCode: true, phone: true, address: true },
+      select: {
+        id: true,
+        name: true,
+        centerCode: true,
+        phone: true,
+        address: true,
+        royaltyRate: true,
+      },
     });
 
     // 2. Fetch Students & Fee Plans of this Center
@@ -113,9 +120,9 @@ export async function GET(req: Request) {
     const recoveryRate =
       totalBilled > 0 ? Math.round((totalCollected / totalBilled) * 100) : 100;
 
-    // 75% Center Retained & 25% HQ Royalty calculation
-    const netRetainedShare = Math.round(totalCollected * 0.75);
-    const hqRoyalty = totalCollected - netRetainedShare;
+    const royaltyRate = centerInfo?.royaltyRate ?? 25;
+    const hqRoyalty = Math.round((totalCollected * royaltyRate) / 100);
+    const netRetainedShare = totalCollected - hqRoyalty;
 
     // 5. Recent branch payments
     const recentPayments = await db.payment.findMany({
@@ -149,6 +156,7 @@ export async function GET(req: Request) {
         totalPendingEmis: totalBalance,
         activeStudentsCount: students.length,
         hqRoyalty,
+        royaltyRate,
       },
       // Original summary metrics
       metrics: {

@@ -23,6 +23,7 @@ import {
   BellRing,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import BrandLogo from '@/components/brand/BrandLogo';
 
 interface StudentItem {
   id: string;
@@ -67,13 +68,14 @@ export default function CenterDashboardPage() {
     totalPendingEmis: 0,
     activeStudentsCount: 0,
     hqRoyalty: 0,
+    royaltyRate: 25,
   });
 
   // Target Revenue Calculator
   const [studentsCount, setStudentsCount] = useState<number>(0);
   const [avgFee, setAvgFee] = useState<number>(22000);
   const totalGross = studentsCount * avgFee;
-  const hqRoyalty = Math.round(totalGross * 0.25);
+  const hqRoyalty = Math.round((totalGross * realStats.royaltyRate) / 100);
   const centerNetProfit = totalGross - hqRoyalty;
 
   // Students State
@@ -146,7 +148,7 @@ export default function CenterDashboardPage() {
         const data = await res.json();
         if (data.stats) {
           const gross = Number(data.stats.totalGrossCollected || 0);
-          const retained = Number(data.stats.netRetainedShare || Math.round(gross * 0.75));
+          const retained = Number(data.stats.netRetainedShare ?? (gross - Number(data.stats.hqRoyalty ?? 0)));
           const royalty = Number(data.stats.hqRoyalty !== undefined ? data.stats.hqRoyalty : gross - retained);
 
           setRealStats({
@@ -155,6 +157,7 @@ export default function CenterDashboardPage() {
             totalPendingEmis: Number(data.stats.totalPendingEmis || 0),
             activeStudentsCount: Number(data.stats.activeStudentsCount || 0),
             hqRoyalty: royalty,
+            royaltyRate: Number(data.stats.royaltyRate ?? 25),
           });
           setStudentsCount(Number(data.stats.activeStudentsCount || 0));
         }
@@ -477,9 +480,7 @@ export default function CenterDashboardPage() {
           {/* Logo Header */}
           <div className={`p-6 border-b flex items-center justify-between ${isDarkMode ? 'border-white/10' : 'border-slate-200'}`}>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center font-black text-black text-sm shadow-lg shadow-orange-500/20">
-                VIQ
-              </div>
+              <BrandLogo size={48} />
               <div>
                 <h2 className={`text-xs font-black tracking-tight leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                   Khanna Branch
@@ -650,7 +651,7 @@ export default function CenterDashboardPage() {
           </button>
         </header>
 
-        {/* 5 DYNAMIC STAT CARDS (75% AND 25% SEPARATE CLEAR SPLIT) */}
+        {/* 5 DYNAMIC STAT CARDS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div
             className={`p-5 rounded-2xl border space-y-3 transition-colors ${
@@ -667,14 +668,14 @@ export default function CenterDashboardPage() {
             <p className="text-[10px] font-mono text-slate-400">Collected at VIQ-KHN-01</p>
           </div>
 
-          {/* 75% CENTER SHARE */}
+          {/* Center share */}
           <div
             className={`p-5 rounded-2xl border space-y-3 transition-colors ${
               isDarkMode ? 'bg-[#0D111A] border-white/10' : 'bg-white border-slate-200 shadow-sm'
             }`}
           >
             <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-medium">Net Retained Share (75%)</span>
+              <span className="text-xs font-medium">Net Retained Share ({100 - realStats.royaltyRate}%)</span>
               <CreditCard className="w-4 h-4 text-emerald-500" />
             </div>
             <h3 className="text-2xl font-black text-emerald-500">
@@ -683,14 +684,14 @@ export default function CenterDashboardPage() {
             <p className="text-[10px] font-mono text-slate-400">Khanna Branch Profit</p>
           </div>
 
-          {/* 25% HQ ROYALTY */}
+          {/* HQ royalty */}
           <div
             className={`p-5 rounded-2xl border space-y-3 transition-colors ${
               isDarkMode ? 'bg-[#0D111A] border-white/10' : 'bg-white border-slate-200 shadow-sm'
             }`}
           >
             <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-medium">HQ Royalty (25%)</span>
+              <span className="text-xs font-medium">HQ Royalty ({realStats.royaltyRate}%)</span>
               <CreditCard className="w-4 h-4 text-orange-400" />
             </div>
             <h3 className="text-2xl font-black text-orange-400">
@@ -803,7 +804,7 @@ export default function CenterDashboardPage() {
               >
                 <div>
                   <span className="text-[10px] font-mono text-slate-400 uppercase font-bold">
-                    My Center Net Profit (75% Share)
+                    My Center Net Profit ({100 - realStats.royaltyRate}% Share)
                   </span>
                   <h3 className="text-3xl sm:text-4xl font-black text-emerald-500 mt-1 font-mono">
                     ₹{centerNetProfit.toLocaleString('en-IN')}
@@ -822,7 +823,7 @@ export default function CenterDashboardPage() {
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block uppercase font-mono">HQ Royalty (25%)</span>
+                    <span className="text-[10px] text-slate-400 block uppercase font-mono">HQ Royalty ({realStats.royaltyRate}%)</span>
                     <span className="font-bold text-orange-500 font-mono">₹{hqRoyalty.toLocaleString('en-IN')}</span>
                   </div>
                 </div>

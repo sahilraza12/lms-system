@@ -11,7 +11,7 @@ interface RevenueCalculatorProps {
 
 export default function RevenueCalculator({
   mode = 'admin',
-  branchName = 'EduNexus Regional Center',
+  branchName = 'VIQ Technologies Regional Center',
   branchCode = 'CTR-NODE-01',
 }: RevenueCalculatorProps) {
   const [studentsPerBranch, setStudentsPerBranch] = useState(100);

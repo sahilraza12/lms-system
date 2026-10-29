@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ShieldCheck, ArrowRight } from 'lucide-react';
 import ThemeToggle from '@/components/theme/ThemeToggle';
+import BrandLogo from '@/components/brand/BrandLogo';
 
 export default function Navbar() {
   const handleClearSessionBeforeLogin = () => {
@@ -18,9 +19,7 @@ export default function Navbar() {
         
         {/* VIQ Technologies Brand Logo */}
         <Link href="/" className="flex items-center gap-3">
-          <div className="viq-btn-primary w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm">
-            VIQ
-          </div>
+          <BrandLogo size={60} />
           <div>
             <span className="text-lg font-black tracking-tight block leading-none">
               VIQ <span style={{ color: '#f97316' }}>Technologies</span>

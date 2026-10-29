@@ -15,6 +15,7 @@ import {
   EyeOff,
   Loader2,
 } from 'lucide-react';
+import BrandLogo from '@/components/brand/BrandLogo';
 
 type RoleType = 'student' | 'center' | 'teacher' | 'admin';
 
@@ -132,13 +133,18 @@ export default function LoginPage() {
 
       {/* Top Bar Navigation */}
       <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0D111A] px-4 py-2 text-xs font-bold text-slate-300 hover:text-white hover:bg-white/5 transition"
-        >
-          <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
-          <span>Back to Home</span>
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/" aria-label="VIQ Technologies home">
+            <BrandLogo size={44} />
+          </Link>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0D111A] px-4 py-2 text-xs font-bold text-slate-300 hover:text-white hover:bg-white/5 transition"
+          >
+            <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
+            <span>Back to Home</span>
+          </Link>
+        </div>
         <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
           <Lock aria-hidden="true" className="h-3.5 w-3.5 text-emerald-500" />
           <span>SECURE ROLE-BASED SIGN IN</span>

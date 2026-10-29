@@ -8,24 +8,23 @@ import RolePortals from '@/components/landing/RolePortals';
 
 export default function LandingPage() {
   return (
-    <main className="viq-page min-h-screen selection:bg-orange-500 selection:text-white">
-      {/* 1. Hero Section (Includes Floating Navbar & Multi-Video Background) */}
+    <main className="viq-page min-h-screen selection:bg-orange-500 selection:text-white bg-[#07090E] text-slate-100">
+      {/* 1. Floating Navigation */}
+      <Navbar />
 
-      <Navbar/>
-
+      {/* 2. Hero Section */}
       <HeroSection />
-
-      {/* 2. Solutions & Bento Grid */}
+      
+      {/* 4. Solutions & Bento Features */}
       <FeaturesGrid />
-      <RolePortals />
 
-      {/* 3. Industrial Training Programs Catalog */}
+      {/* 5. Industrial Training Programs Catalog */}
       <CoursesCatalog />
 
-      {/* 4. Public Credential Verification Section */}
+      {/* 6. Public Certificate & Credential Verification Desk */}
       <VerifyCredential />
 
-      {/* 5. Enterprise Footer */}
+      {/* 7. Enterprise Footer */}
       <Footer />
     </main>
   );

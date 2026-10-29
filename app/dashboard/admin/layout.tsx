@@ -19,6 +19,7 @@ import {
   Loader2,
   ShieldCheck,
 } from 'lucide-react';
+import BrandLogo from '@/components/brand/BrandLogo';
 
 export default function AdminPortalLayout({
   children,
@@ -63,9 +64,7 @@ export default function AdminPortalLayout({
       {/* 1. Mobile Sticky Top Header */}
       <header className="lg:hidden flex items-center justify-between px-4 py-3 bg-[#0D111A]/95 backdrop-blur-md border-b border-white/10 sticky top-0 z-40 w-full">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-orange-500 text-black font-black text-xs flex items-center justify-center shadow-md shadow-orange-500/20">
-            VIQ
-          </div>
+          <BrandLogo size={44} />
           <div>
             <span className="font-black text-sm tracking-tight text-white block">VIQ HQ</span>
             <span className="text-[9px] font-mono text-orange-400 font-bold tracking-widest block uppercase">
@@ -102,9 +101,7 @@ export default function AdminPortalLayout({
           {/* Brand Logo Header */}
           <div className="flex items-center justify-between pb-3 border-b border-white/10">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-orange-500 text-black font-black text-sm flex items-center justify-center shadow-lg shadow-orange-500/25">
-                VIQ
-              </div>
+              <BrandLogo size={52} />
               <div>
                 <span className="font-black text-base tracking-tight text-white block">VIQ HQ</span>
                 <span className="text-[10px] font-mono text-orange-400 font-bold tracking-widest block uppercase">

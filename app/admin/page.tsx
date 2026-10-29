@@ -38,6 +38,7 @@ interface ApiCenterRecord {
   id: string;
   name: string;
   centerCode: string;
+  royaltyRate?: number;
   address?: string | null;
   studentsCount?: number;
   _count?: { students?: number; teachers?: number };
@@ -75,6 +76,9 @@ export default function AdminDashboardPage() {
   const [selectedBranchId, setSelectedBranchId] = useState<string>('ALL');
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [royaltyDrafts, setRoyaltyDrafts] = useState<Record<string, string>>({});
+  const [savingRoyaltyId, setSavingRoyaltyId] = useState<string | null>(null);
+  const [royaltyError, setRoyaltyError] = useState('');
 
   // Interactive Revenue Simulator States
   const [simStudents, setSimStudents] = useState<number>(120);
@@ -126,11 +130,12 @@ export default function AdminDashboardPage() {
               studentsCount: Number(c.studentsCount ?? c._count?.students ?? 0),
               collectedRevenue: collected,
               pendingFees: pending,
-              royaltyRate: 25,
+              royaltyRate: Number(c.royaltyRate ?? 25),
             };
           });
 
           setBranches(mapped);
+          setRoyaltyDrafts({});
           setSimBranchCount(mapped.length || 2);
         }
       }
@@ -145,6 +150,43 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     void loadAdminTelemetry();
   }, []);
+
+  const saveRoyaltyRate = async (branch: BranchMetric) => {
+    const royaltyRate = Number(royaltyDrafts[branch.id] ?? branch.royaltyRate);
+    if (!Number.isInteger(royaltyRate) || royaltyRate < 0 || royaltyRate > 100) {
+      setRoyaltyError('Royalty rate must be a whole number between 0 and 100.');
+      return;
+    }
+
+    setSavingRoyaltyId(branch.id);
+    setRoyaltyError('');
+    try {
+      const res = await fetch(`/api/admin/centers/${branch.id}/royalty-rate`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ royaltyRate }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to save royalty rate.');
+      }
+
+      setBranches((current) =>
+        current.map((item) =>
+          item.id === branch.id ? { ...item, royaltyRate: data.center.royaltyRate } : item
+        )
+      );
+      setRoyaltyDrafts((current) => {
+        const next = { ...current };
+        delete next[branch.id];
+        return next;
+      });
+    } catch (error: unknown) {
+      setRoyaltyError(error instanceof Error ? error.message : 'Failed to save royalty rate.');
+    } finally {
+      setSavingRoyaltyId(null);
+    }
+  };
 
   // Filtered branches depending on dropdown isolation
   const activeBranches = useMemo(() => {
@@ -168,7 +210,7 @@ export default function AdminDashboardPage() {
 
   const totalHqRoyalty = useMemo(() => {
     return activeBranches.reduce(
-      (sum, b) => sum + Math.round(((Number(b.collectedRevenue) || 0) * (b.royaltyRate || 25)) / 100),
+      (sum, b) => sum + Math.round(((Number(b.collectedRevenue) || 0) * (b.royaltyRate ?? 25)) / 100),
       0
     );
   }, [activeBranches]);
@@ -183,7 +225,7 @@ export default function AdminDashboardPage() {
     <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto w-full min-w-0">
       
       {/* 1. Header & Branch Scope Selector */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[var(--border-color)]">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b">
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight flex items-center gap-2">
             <span>Executive Command & Revenue Engine</span>
@@ -255,7 +297,7 @@ export default function AdminDashboardPage() {
             ₹{loading ? '...' : totalHqRoyalty.toLocaleString('en-IN')}
           </p>
           <span className="text-[11px] font-mono viq-text-muted block font-bold">
-            Direct Institutional Share (25%)
+            Total share based on center-specific deals
           </span>
         </div>
 
@@ -427,6 +469,11 @@ export default function AdminDashboardPage() {
             <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
         </div>
+        {royaltyError && (
+          <p role="alert" className="px-4 sm:px-6 py-3 text-xs font-semibold text-red-400">
+            {royaltyError}
+          </p>
+        )}
 
         {/* Mobile View: Stacked Cards (< 768px) */}
         <div className="grid grid-cols-1 gap-3 p-4 md:hidden">
@@ -459,9 +506,31 @@ export default function AdminDashboardPage() {
                     <span className="viq-text-muted text-[10px] block">PENDING</span>
                     <span className="font-bold text-amber-500">₹{branch.pendingFees.toLocaleString('en-IN')}</span>
                   </div>
-                  <div>
-                    <span className="viq-text-muted text-[10px] block">HQ ROYALTY (25%)</span>
+                  <div className="space-y-1">
+                    <span className="viq-text-muted text-[10px] block">HQ ROYALTY ({branch.royaltyRate}%)</span>
                     <span className="font-bold text-orange-500">₹{branchRoyalty.toLocaleString('en-IN')}</span>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        aria-label={`Royalty rate for ${branch.name}`}
+                        value={royaltyDrafts[branch.id] ?? String(branch.royaltyRate)}
+                        onChange={(event) =>
+                          setRoyaltyDrafts((current) => ({ ...current, [branch.id]: event.target.value }))
+                        }
+                        className="w-16 rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] px-1.5 py-1 text-[10px]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void saveRoyaltyRate(branch)}
+                        disabled={savingRoyaltyId === branch.id}
+                        className="rounded bg-orange-500/10 px-2 py-1 text-[10px] font-bold text-orange-500 disabled:opacity-50"
+                      >
+                        {savingRoyaltyId === branch.id ? 'Saving' : 'Save %'}
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <span className="viq-text-muted text-[10px] block">STUDENTS</span>
@@ -505,7 +574,29 @@ export default function AdminDashboardPage() {
                       ₹{branch.pendingFees.toLocaleString('en-IN')}
                     </td>
                     <td className="py-4 px-6 font-mono text-orange-500 font-bold">
-                      ₹{branchRoyalty.toLocaleString('en-IN')} ({branch.royaltyRate}%)
+                      <div>₹{branchRoyalty.toLocaleString('en-IN')} ({branch.royaltyRate}%)</div>
+                      <div className="mt-2 flex items-center justify-end gap-1.5">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          aria-label={`Royalty rate for ${branch.name}`}
+                          value={royaltyDrafts[branch.id] ?? String(branch.royaltyRate)}
+                          onChange={(event) =>
+                            setRoyaltyDrafts((current) => ({ ...current, [branch.id]: event.target.value }))
+                          }
+                          className="w-16 rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] px-1.5 py-1 text-xs text-[var(--text-primary)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void saveRoyaltyRate(branch)}
+                          disabled={savingRoyaltyId === branch.id}
+                          className="rounded bg-orange-500/10 px-2 py-1 text-[10px] font-bold text-orange-500 disabled:opacity-50"
+                        >
+                          {savingRoyaltyId === branch.id ? 'Saving' : 'Save'}
+                        </button>
+                      </div>
                     </td>
                     <td className="py-4 px-6 text-right">
                       <button

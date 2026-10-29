@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react';
 import { Suspense } from 'react';
 import Link from 'next/link';
+import BrandLogo from '@/components/brand/BrandLogo';
 import { 
   ShieldCheck, 
   Printer, 
@@ -158,9 +159,7 @@ function CertificateContent({
           {/* Header Seal & Registry Meta */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 print:border-slate-200 pb-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white flex items-center justify-center font-black text-sm shadow-md">
-                VIQ
-              </div>
+              <BrandLogo size={56} />
               <div>
                 <span className="font-black text-base sm:text-lg tracking-tight block text-white print:text-slate-900">
                   VIQ LEARNING CLOUD

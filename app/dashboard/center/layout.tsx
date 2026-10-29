@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import BrandLogo from '@/components/brand/BrandLogo';
 import { 
   LayoutDashboard, 
   Users, 
@@ -77,9 +78,7 @@ export default function CenterLayout({
       {/* Mobile Header Bar */}
       <header className="md:hidden sticky top-0 z-40 bg-slate-900 text-white h-16 px-4 flex items-center justify-between border-b border-slate-800">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-orange-600 flex items-center justify-center font-black text-xs">
-            BR
-          </div>
+          <BrandLogo size={40} />
           <span className="font-bold text-sm tracking-tight">Branch Command Console</span>
         </div>
         <button
@@ -108,9 +107,7 @@ export default function CenterLayout({
         <div className="flex flex-col flex-1 overflow-y-auto">
           {/* Brand & Center Header */}
           <div className="h-16 px-6 flex items-center gap-3 border-b border-slate-800/80">
-            <div className="w-9 h-9 rounded-xl bg-orange-600 text-white flex items-center justify-center font-black text-xs shadow-md shadow-orange-600/30">
-              VIQ
-            </div>
+            <BrandLogo size={48} />
             <div>
               <span className="text-sm font-bold text-white block leading-tight">Branch Directorate</span>
               <span className="text-[10px] font-mono text-orange-400 uppercase tracking-widest block font-bold">
