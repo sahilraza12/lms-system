@@ -119,45 +119,51 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen w-full flex-col justify-between overflow-hidden bg-[#07090E] p-6 text-slate-100 sm:p-12 font-sans select-none">
+    <main className="relative flex min-h-screen w-full flex-col justify-between overflow-x-hidden bg-[#07090E] p-4 sm:p-12 text-slate-100 font-sans select-none">
       
-      {/* Background Decorators - Completely isolated in back layer */}
+      {/* Background Decorators */}
       <div 
         style={{ pointerEvents: 'none' }} 
         className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:32px_32px] opacity-30" 
       />
       <div 
         style={{ pointerEvents: 'none' }} 
-        className="pointer-events-none absolute left-1/2 top-1/4 z-0 h-[320px] w-[500px] -translate-x-1/2 rounded-full bg-orange-500/10 blur-[130px]" 
+        className="pointer-events-none absolute left-1/2 top-1/4 z-0 h-[280px] w-[350px] sm:h-[320px] sm:w-[500px] -translate-x-1/2 rounded-full bg-orange-500/10 blur-[110px]" 
       />
 
-      {/* Top Bar Navigation */}
-      <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/" aria-label="VIQ Technologies home">
-            <BrandLogo size={44} />
+      {/* Top Bar Navigation (Clean Responsive Alignment) */}
+      <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between gap-2 py-1">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link href="/" aria-label="VIQ Technologies home" className="shrink-0">
+            <BrandLogo size={36} className="sm:hidden" />
+            <div className="hidden sm:block">
+              <BrandLogo size={44} />
+            </div>
           </Link>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0D111A] px-4 py-2 text-xs font-bold text-slate-300 hover:text-white hover:bg-white/5 transition"
+            className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-white/10 bg-[#0D111A] px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold text-slate-300 hover:text-white hover:bg-white/5 transition whitespace-nowrap"
           >
-            <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
-            <span>Back to Home</span>
+            <ArrowLeft aria-hidden="true" className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+            <span className="hidden xs:inline">Back to Home</span>
+            <span className="xs:hidden">Home</span>
           </Link>
         </div>
-        <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
-          <Lock aria-hidden="true" className="h-3.5 w-3.5 text-emerald-500" />
-          <span>SECURE ROLE-BASED SIGN IN</span>
+        
+        <div className="flex items-center gap-1.5 text-[9px] sm:text-[11px] font-mono text-slate-400 shrink-0">
+          <Lock aria-hidden="true" className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-500" />
+          <span className="hidden sm:inline">SECURE ROLE-BASED SIGN IN</span>
+          <span className="sm:hidden">SECURE LOGIN</span>
         </div>
       </header>
 
       {/* Main Login Workspace Box */}
-      <div className="relative z-30 mx-auto my-auto w-full max-w-md py-6" style={{ isolation: 'isolate' }}>
-        <section className="space-y-6 rounded-3xl border border-white/10 bg-[#0D111A] p-7 sm:p-8 shadow-2xl backdrop-blur-md">
+      <div className="relative z-30 mx-auto my-auto w-full max-w-md py-4 sm:py-6" style={{ isolation: 'isolate' }}>
+        <section className="space-y-5 sm:space-y-6 rounded-2xl sm:rounded-3xl border border-white/10 bg-[#0D111A] p-5 sm:p-8 shadow-2xl backdrop-blur-md">
           
-          {/* TAB SWITCHER - Direct High-Priority Event Binding */}
+          {/* TAB SWITCHER - Fixed 4-Column Grid for Zero Overflow */}
           <div 
-            className="flex items-center justify-between rounded-2xl border border-white/10 bg-[#121620] p-1.5 relative z-50"
+            className="grid grid-cols-4 gap-1 rounded-xl sm:rounded-2xl border border-white/10 bg-[#121620] p-1 relative z-50"
             style={{ pointerEvents: 'auto' }}
           >
             {(['student', 'center', 'teacher', 'admin'] as const).map((option) => {
@@ -174,7 +180,7 @@ export default function LoginPage() {
                     e.preventDefault();
                     selectRole(option);
                   }}
-                  className={`flex-1 rounded-xl py-2 text-center text-xs font-black uppercase tracking-wider transition-all duration-150 cursor-pointer ${
+                  className={`rounded-lg sm:rounded-xl py-2 px-1 text-center text-[10px] sm:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all duration-150 cursor-pointer truncate ${
                     isActive
                       ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/30 font-bold'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -192,17 +198,17 @@ export default function LoginPage() {
           </div>
 
           {/* Dynamic Header */}
-          <header className="space-y-2 text-center pt-1">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-orange-500/20 bg-orange-500/10 text-orange-500 shadow-inner">
-              <Icon aria-hidden="true" className="h-6 w-6 stroke-[2.2]" />
+          <header className="space-y-1.5 sm:space-y-2 text-center pt-1">
+            <div className="mx-auto flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl border border-orange-500/20 bg-orange-500/10 text-orange-500 shadow-inner">
+              <Icon aria-hidden="true" className="h-5 w-5 sm:h-6 sm:w-6 stroke-[2.2]" />
             </div>
-            <h1 className="text-xl font-black tracking-tight text-white">{current.title}</h1>
-            <p className="text-xs leading-relaxed text-slate-400 max-w-xs mx-auto">{current.subtitle}</p>
+            <h1 className="text-lg sm:text-xl font-black tracking-tight text-white">{current.title}</h1>
+            <p className="text-[11px] sm:text-xs leading-relaxed text-slate-400 max-w-xs mx-auto">{current.subtitle}</p>
           </header>
 
           {/* Form */}
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-1.5 text-left">
+          <form onSubmit={handleLogin} className="space-y-3.5 sm:space-y-4">
+            <div className="space-y-1 text-left">
               <label
                 htmlFor="login-identifier"
                 className="text-[10px] font-mono font-bold uppercase text-slate-400 tracking-wider block"
@@ -218,11 +224,11 @@ export default function LoginPage() {
                 value={identifier}
                 onChange={(event) => setIdentifier(event.target.value)}
                 placeholder={current.placeholder}
-                className="w-full rounded-xl border border-white/10 bg-[#121620] px-4 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500/60 transition"
+                className="w-full rounded-xl border border-white/10 bg-[#121620] px-3.5 py-2.5 sm:px-4 sm:py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500/60 transition"
               />
             </div>
 
-            <div className="space-y-1.5 text-left">
+            <div className="space-y-1 text-left">
               <label
                 htmlFor="login-password"
                 className="text-[10px] font-mono font-bold uppercase text-slate-400 tracking-wider block"
@@ -239,13 +245,13 @@ export default function LoginPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl border border-white/10 bg-[#121620] px-4 py-3 pr-11 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500/60 transition"
+                  className="w-full rounded-xl border border-white/10 bg-[#121620] px-3.5 py-2.5 sm:px-4 sm:py-3 pr-10 sm:pr-11 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500/60 transition"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
                   tabIndex={-1}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white transition cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white transition cursor-pointer"
                   title={showPassword ? 'Hide password' : 'Show password'}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
@@ -259,7 +265,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <p className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-center text-xs font-medium text-red-400" role="alert">
+              <p className="rounded-xl border border-red-500/20 bg-red-500/10 p-2.5 text-center text-xs font-medium text-red-400" role="alert">
                 {error}
               </p>
             )}
@@ -267,7 +273,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3.5 text-xs font-bold text-black transition hover:bg-orange-400 shadow-lg shadow-orange-500/20 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 sm:py-3.5 text-xs font-bold text-black transition hover:bg-orange-400 shadow-lg shadow-orange-500/20 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? (
                 <>
@@ -286,7 +292,7 @@ export default function LoginPage() {
       </div>
 
       {/* Footer */}
-      <footer className="relative z-20 mx-auto w-full max-w-6xl text-center text-[10px] font-mono tracking-widest text-slate-600 uppercase">
+      <footer className="relative z-20 mx-auto w-full max-w-6xl text-center text-[9px] sm:text-[10px] font-mono tracking-widest text-slate-600 uppercase py-2">
         SECURE SESSION // VIQ TECHNOLOGIES
       </footer>
     </main>
