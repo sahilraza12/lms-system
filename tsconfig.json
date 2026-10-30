@@ -34,7 +34,7 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
-  ],
+, "components/student/AiMentorChat"  ],
   "exclude": [
     "node_modules"
   ]

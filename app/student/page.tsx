@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -16,25 +16,21 @@ import {
   CheckCircle2,
   Send,
   Loader2,
-  Clock,
   Award,
   UploadCloud,
   File as FileIcon,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  Maximize2,
+  Minimize2,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import LogoutButton from '@/components/auth/LogoutButton';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 import BrandLogo from '@/components/brand/BrandLogo';
-
-interface SubmissionData {
-  id: string;
-  submissionUrl?: string;
-  fileUrls?: string[];
-  remarks: string | null;
-  submittedAt?: string;
-  status: string;
-}
 
 interface TaskItem {
   id: string;
@@ -88,6 +84,12 @@ interface AnnouncementItem {
   createdAt?: string;
 }
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  provider?: string;
+}
+
 export default function StudentPortalPage() {
   const router = useRouter();
 
@@ -97,7 +99,7 @@ export default function StudentPortalPage() {
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Modal State
+  // Modal State for Lab Work
   const [activeSubmittingTask, setActiveSubmittingTask] = useState<TaskItem | null>(null);
   const [submissionUrl, setSubmissionUrl] = useState('');
   const [liveUrl, setLiveUrl] = useState('');
@@ -107,7 +109,32 @@ export default function StudentPortalPage() {
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // 1. Session verification & live portal data retrieval
+  // AI Floating Chatbot State
+  const [isAiOpen, setIsAiOpen] = useState(false);
+  const [isAiFullScreen, setIsAiFullScreen] = useState(false);
+  const [aiMessages, setAiMessages] = useState<ChatMessage[]>([
+    {
+      role: 'assistant',
+      content: 'Hello! I am your VIQ Tech AI Mentor. Feel free to ask any doubt regarding Full-Stack Development, DSA, bugs, or practical lab assignments in English or Hinglish!',
+      provider: 'System',
+    },
+  ]);
+  const [aiInput, setAiInput] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const aiChatEndRef = useRef<HTMLDivElement>(null);
+
+  // Voice States
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
+
+  useEffect(() => {
+    if (isAiOpen) {
+      aiChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [aiMessages, aiLoading, isAiOpen]);
+
+  // Session verification & live portal data retrieval
   const loadPortalData = useCallback(async () => {
     try {
       setLoading(true);
@@ -117,7 +144,6 @@ export default function StudentPortalPage() {
         fetch('/api/student/announcements'),
       ]);
 
-      // Redirect if session is unauthenticated or forbidden
       if (resProfile.status === 401 || resProfile.status === 403) {
         router.push('/login');
         return;
@@ -130,7 +156,6 @@ export default function StudentPortalPage() {
       if (dataProfile?.success && dataProfile?.student) {
         const s = dataProfile.student;
 
-        // Resolve candidate profile identifiers dynamically
         const resolvedName =
           s.fullName ||
           s.name ||
@@ -159,7 +184,6 @@ export default function StudentPortalPage() {
         const resolvedProgress =
           dataProfile.billingSummary?.progress ?? s.progress ?? 85;
 
-        // Map and parse billing ledger records
         const paymentsList: PaymentRecord[] = (dataInvoices?.invoices || []).map((inv: any) => ({
           id: inv.id || inv.paymentId,
           receiptNo: inv.receiptNo || inv.invoiceNo || inv.id,
@@ -229,7 +253,7 @@ export default function StudentPortalPage() {
     loadPortalData();
   }, [loadPortalData]);
 
-  // Modal Handlers
+  // Lab Submission Handlers
   const openSubmissionModal = (task: TaskItem) => {
     setActiveSubmittingTask(task);
     setSubmissionUrl(task.submissionUrl || '');
@@ -258,7 +282,6 @@ export default function StudentPortalPage() {
     setUploadedFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // 2. Submit Handler (Handles GitHub repository, Live/Drive links, and local file uploads)
   const handleSubmitLab = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeSubmittingTask) return;
@@ -300,7 +323,6 @@ export default function StudentPortalPage() {
     }
   };
 
-  // 3. Unsubmit / Delete wrong submission
   const handleDeleteSubmission = async (task: TaskItem) => {
     const confirmDelete = window.confirm(
       'Are you sure you want to unsubmit this assignment? You will be able to resubmit a new solution.'
@@ -329,6 +351,168 @@ export default function StudentPortalPage() {
     }
   };
 
+  // ==========================================
+  // AI Voice & Speech Logic
+  // ==========================================
+
+  const speakReply = (text: string) => {
+    if (!isVoiceEnabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
+    window.speechSynthesis.cancel();
+
+    const cleanText = text
+      .replace(/```[\s\S]*?```/g, 'Here is the relevant code.')
+      .replace(/[*#_`]/g, '')
+      .trim();
+
+    if (!cleanText) return;
+
+    const playAudio = () => {
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+
+      const voices = window.speechSynthesis.getVoices();
+      const humanVoice =
+        voices.find((v) => v.name.includes('Natural') && (v.lang.includes('IN') || v.lang.includes('hi') || v.lang.includes('en'))) ||
+        voices.find((v) => v.name.includes('Google हिन्दी')) ||
+        voices.find((v) => v.name.includes('Neerja') || v.name.includes('Swara') || v.name.includes('Prabhat')) ||
+        voices.find((v) => v.name.includes('Google UK English Female') || v.name.includes('Google US English')) ||
+        voices.find((v) => v.lang.includes('en-IN') || v.lang.includes('hi-IN'));
+
+      if (humanVoice) {
+        utterance.voice = humanVoice;
+      }
+
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+
+      window.speechSynthesis.speak(utterance);
+    };
+
+    if (window.speechSynthesis.getVoices().length === 0) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        playAudio();
+      };
+    } else {
+      playAudio();
+    }
+  };
+
+  const toggleVoice = () => {
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
+    setIsVoiceEnabled(!isVoiceEnabled);
+  };
+
+  const startListening = () => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-IN'; 
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setAiInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    };
+
+    recognition.start();
+  };
+
+  // ==========================================
+  // AI Chat Handler with Typewriter Streaming
+  // ==========================================
+  const handleAiSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiInput.trim() || aiLoading) return;
+
+    const userText = aiInput.trim();
+    setAiInput('');
+
+    // Append user message & placeholder for assistant's streaming text
+    const currentHistory = [...aiMessages, { role: 'user' as const, content: userText }];
+    setAiMessages([
+      ...currentHistory,
+      { role: 'assistant', content: '', provider: 'Thinking...' }
+    ]);
+    setAiLoading(true);
+
+    try {
+      const res = await fetch('/api/student/ai-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: currentHistory.map((m) => ({ role: m.role, content: m.content })),
+        }),
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error('AI models unavailable.');
+      }
+
+      const activeProvider = res.headers.get('X-AI-Provider') || 'AI Assistant';
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullAccumulatedText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const incomingChunk = decoder.decode(value, { stream: true });
+        fullAccumulatedText += incomingChunk;
+
+        // Update the last assistant message chunk-by-chunk (Typewriter effect)
+        setAiMessages((prev) => {
+          const next = [...prev];
+          const lastIdx = next.length - 1;
+          if (lastIdx >= 0 && next[lastIdx].role === 'assistant') {
+            next[lastIdx] = {
+              role: 'assistant',
+              content: fullAccumulatedText,
+              provider: activeProvider,
+            };
+          }
+          return next;
+        });
+      }
+
+      // Read aloud only when typing is finished
+      if (fullAccumulatedText.trim()) {
+        speakReply(fullAccumulatedText);
+      }
+    } catch (err: any) {
+      setAiMessages((prev) => {
+        const next = [...prev];
+        const lastIdx = next.length - 1;
+        if (lastIdx >= 0 && next[lastIdx].role === 'assistant') {
+          next[lastIdx] = {
+            role: 'assistant',
+            content: `Error: ${err.message || 'All AI models failed to stream.'}`,
+            provider: 'System Error',
+          };
+        }
+        return next;
+      });
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   if (loading && !student) {
     return (
       <div className="student-portal-theme min-h-screen bg-[#07090e] text-white flex items-center justify-center">
@@ -346,8 +530,7 @@ export default function StudentPortalPage() {
   const receiptsList = student?.feePlan?.payments || [];
 
   return (
-    <div className="student-portal-theme min-h-screen bg-[#07090e] text-slate-100 font-sans selection:bg-orange-500 selection:text-white">
-      {/* Top Header Navigation */}
+    <div className="student-portal-theme min-h-screen bg-[#07090e] text-slate-100 font-sans selection:bg-orange-500 selection:text-white relative">
       <header className="sticky top-0 z-40 h-16 bg-[#0a0d14]/90 backdrop-blur-md px-6 sm:px-12 flex items-center justify-between border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
           <BrandLogo size={48} />
@@ -379,7 +562,6 @@ export default function StudentPortalPage() {
       </header>
 
       <main className="max-w-6xl mx-auto p-6 sm:p-10 space-y-6">
-        {/* Active Candidate Banner */}
         <div className="p-7 sm:p-8 rounded-3xl bg-[#0d121c] border border-white/[0.07] flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden shadow-2xl">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[11px] font-mono uppercase font-semibold">
@@ -406,7 +588,6 @@ export default function StudentPortalPage() {
           </div>
         </div>
 
-        {/* Notice Board */}
         <div className="p-4 rounded-2xl bg-[#0d121c] border border-orange-500/20 space-y-2.5">
           <div className="flex items-center gap-2 text-orange-400 text-xs font-mono uppercase font-bold tracking-wider">
             <Megaphone className="w-4 h-4" />
@@ -424,7 +605,6 @@ export default function StudentPortalPage() {
           </div>
         </div>
 
-        {/* Telemetry Bar */}
         <div className="p-5 rounded-2xl bg-[#0d121c] border border-white/[0.07] space-y-3">
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-slate-300 flex items-center gap-2">
@@ -441,9 +621,7 @@ export default function StudentPortalPage() {
           </div>
         </div>
 
-        {/* Notes & Tasks Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Curated Study Notes */}
           <div className="p-6 rounded-3xl bg-[#0d121c] border border-white/[0.07] space-y-4">
             <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
               <div className="flex items-center gap-2">
@@ -479,7 +657,6 @@ export default function StudentPortalPage() {
             )}
           </div>
 
-          {/* Lab Assignments & Tasks */}
           <div className="p-6 rounded-3xl bg-[#0d121c] border border-white/[0.07] space-y-4">
             <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
               <div className="flex items-center gap-2">
@@ -558,7 +735,6 @@ export default function StudentPortalPage() {
           </div>
         </div>
 
-        {/* Fee & Invoices Section */}
         <div id="receipts-section" className="p-6 sm:p-8 rounded-3xl bg-[#0d121c] border border-white/[0.07] space-y-6">
           <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
             <div className="flex items-center gap-3">
@@ -637,7 +813,158 @@ export default function StudentPortalPage() {
         </div>
       </main>
 
-      {/* Complete Multi-Format Submission Modal */}
+      {/* Floating Circular Bot Button */}
+      {!isAiOpen && (
+        <button
+          type="button"
+          onClick={() => setIsAiOpen(true)}
+          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-tr from-orange-600 to-amber-500 shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 border-2 border-white/20 group cursor-pointer overflow-hidden p-0.5"
+          aria-label="Open VIQ AI Mentor"
+        >
+          <img
+            src="/unnamed.png"
+            alt="AI Assistant"
+            className="h-full w-full object-cover rounded-full"
+          />
+          <span className="absolute -top-1 -right-1 flex h-4 w-4">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-[#07090e]"></span>
+          </span>
+        </button>
+      )}
+
+      {/* Interactive Chat Window */}
+      {isAiOpen && (
+        <div
+          className={`fixed z-50 flex flex-col bg-[#0D111A] border border-white/10 shadow-2xl transition-all duration-200 backdrop-blur-xl ${
+            isAiFullScreen
+              ? 'inset-2 sm:inset-6 rounded-2xl'
+              : 'bottom-4 right-4 sm:bottom-6 sm:right-6 w-[92vw] sm:w-[420px] h-[560px] max-h-[85vh] rounded-2xl'
+          }`}
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#121620] rounded-t-2xl">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl border border-orange-500/20 bg-[#07090E] overflow-hidden shrink-0 flex items-center justify-center p-0.5">
+                <img src="/ai-chatbot.jpg" alt="VIQ AI Mentor" className="h-full w-full object-cover rounded-lg" />
+              </div>
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>VIQ AI Mentor</span>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    Live
+                  </span>
+                </h3>
+                <p className="text-[10px] text-slate-400">Coding, DSA & Technical Assistant</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 text-slate-400">
+              <button
+                type="button"
+                onClick={toggleVoice}
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                  isVoiceEnabled ? 'text-orange-400 hover:bg-orange-500/10' : 'text-slate-500 hover:bg-white/5'
+                }`}
+                title={isVoiceEnabled ? 'Voice Enabled' : 'Voice Muted'}
+              >
+                {isVoiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAiFullScreen((prev) => !prev)}
+                className="p-1.5 rounded-lg hover:bg-white/5 hover:text-white transition cursor-pointer"
+              >
+                {isAiFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+                  setIsAiOpen(false);
+                }}
+                className="p-1.5 rounded-lg hover:bg-white/5 hover:text-red-400 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-3.5 text-xs sm:text-sm">
+            {aiMessages.map((m, idx) => (
+              <div
+                key={idx}
+                className={`flex items-start gap-2 ${
+                  m.role === 'user' ? 'justify-end' : 'justify-start'
+                }`}
+              >
+                {m.role === 'assistant' && (
+                  <div className="h-7 w-7 rounded-lg border border-orange-500/20 overflow-hidden shrink-0 mt-0.5 bg-[#07090E]">
+                    <img src="/unnamed.png" alt="AI Mentor" className="h-full w-full object-cover" />
+                  </div>
+                )}
+
+                <div
+                  className={`max-w-[85%] rounded-xl p-3 leading-relaxed whitespace-pre-wrap ${
+                    m.role === 'user'
+                      ? 'bg-orange-500 text-black font-semibold'
+                      : 'bg-[#121620] border border-white/10 text-slate-200'
+                  }`}
+                >
+                  {m.content}
+                  
+                  {/* Blinking Typewriter Cursor UI during stream */}
+                  {aiLoading && idx === aiMessages.length - 1 && m.role === 'assistant' && (
+                    <span className="inline-block w-1.5 h-3.5 ml-1 bg-orange-400 animate-pulse align-middle" />
+                  )}
+
+                  {m.provider && (
+                    <div className="mt-1.5 text-[8px] font-mono text-slate-500 border-t border-white/5 pt-1">
+                      via {m.provider}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div ref={aiChatEndRef} />
+          </div>
+
+          <form
+            onSubmit={handleAiSend}
+            className="p-2.5 sm:p-3 border-t border-white/10 bg-[#121620] flex items-center gap-2 rounded-b-2xl"
+          >
+            <input
+              type="text"
+              value={aiInput}
+              onChange={(e) => setAiInput(e.target.value)}
+              placeholder={isListening ? "Listening..." : "Ask code doubt or bug error..."}
+              className="flex-1 rounded-xl border border-white/10 bg-[#07090E] px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500/50"
+            />
+            
+            <button
+              type="button"
+              onClick={startListening}
+              className={`p-2 rounded-xl border transition cursor-pointer flex items-center justify-center shrink-0 ${
+                isListening
+                  ? 'bg-red-500/20 border-red-500 text-red-400 animate-pulse'
+                  : 'bg-white/[0.04] border-white/10 text-slate-300 hover:text-orange-400 hover:border-orange-500/30'
+              }`}
+              title={isListening ? 'Listening...' : 'Click to Speak'}
+            >
+              {isListening ? <Mic className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </button>
+
+            <button
+              type="submit"
+              disabled={aiLoading || !aiInput.trim()}
+              className="px-3.5 py-2 rounded-xl bg-orange-500 hover:bg-orange-400 text-black font-bold text-xs flex items-center gap-1 transition disabled:opacity-50 cursor-pointer shrink-0"
+            >
+              <Send className="h-3.5 w-3.5" />
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Lab Work Submission Modal */}
       {activeSubmittingTask && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-[#0e131f] border border-white/[0.1] max-w-lg w-full p-6 sm:p-7 rounded-3xl space-y-5 my-auto shadow-2xl">
@@ -667,7 +994,6 @@ export default function StudentPortalPage() {
             )}
 
             <form onSubmit={handleSubmitLab} className="space-y-4">
-              {/* GitHub Link */}
               <div>
                 <label className="text-[11px] font-mono uppercase text-slate-400 font-semibold block mb-1">
                   GitHub Repository Link
@@ -684,7 +1010,6 @@ export default function StudentPortalPage() {
                 </div>
               </div>
 
-              {/* Live URL / Google Drive Link */}
               <div>
                 <label className="text-[11px] font-mono uppercase text-slate-400 font-semibold block mb-1">
                   Live Project URL / Google Drive Link
@@ -701,7 +1026,6 @@ export default function StudentPortalPage() {
                 </div>
               </div>
 
-              {/* Local File Direct Upload */}
               <div>
                 <label className="text-[11px] font-mono uppercase text-slate-400 font-semibold block mb-1">
                   Direct File Upload (PDF, Video, Photos, ZIP)
@@ -722,7 +1046,6 @@ export default function StudentPortalPage() {
                   />
                 </label>
 
-                {/* Uploaded File List */}
                 {uploadedFiles.length > 0 && (
                   <div className="mt-2.5 space-y-1.5 max-h-28 overflow-y-auto">
                     {uploadedFiles.map((file, idx) => (
@@ -750,7 +1073,6 @@ export default function StudentPortalPage() {
                 )}
               </div>
 
-              {/* Remarks / Testing Notes */}
               <div>
                 <label className="text-[11px] font-mono uppercase text-slate-400 font-semibold block mb-1">
                   Submission Remarks / Execution Notes (Optional)
@@ -764,7 +1086,6 @@ export default function StudentPortalPage() {
                 />
               </div>
 
-              {/* Action Buttons */}
               <div className="flex items-center gap-3 pt-2">
                 <button
                   type="button"
