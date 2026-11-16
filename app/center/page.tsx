@@ -21,9 +21,11 @@ import {
   Menu,
   Receipt,
   BellRing,
+  Save,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import BrandLogo from '@/components/brand/BrandLogo';
+import CenterLogoUpload from '@/components/admin/CenterLogoUpload';
 
 interface StudentItem {
   id: string;
@@ -63,6 +65,9 @@ export default function CenterDashboardPage() {
   // Live Database Overview Metrics
   const [loadingMetrics, setLoadingMetrics] = useState<boolean>(true);
   const [realStats, setRealStats] = useState({
+    id: '',
+    name: 'Khanna Branch',
+    logoUrl: '',
     totalGrossCollected: 0,
     netRetainedShare: 0,
     totalPendingEmis: 0,
@@ -77,6 +82,11 @@ export default function CenterDashboardPage() {
   const totalGross = studentsCount * avgFee;
   const hqRoyalty = Math.round((totalGross * realStats.royaltyRate) / 100);
   const centerNetProfit = totalGross - hqRoyalty;
+
+  // Settings State for Editing Name
+  const [editCenterName, setEditCenterName] = useState('');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [settingsNotice, setSettingsNotice] = useState({ type: '', text: '' });
 
   // Students State
   const [students, setStudents] = useState<StudentItem[]>([]);
@@ -122,7 +132,6 @@ export default function CenterDashboardPage() {
   // Tasks State
   const [taskTitle, setTaskTitle] = useState('');
   const [taskBatch, setTaskBatch] = useState(COURSES[0]);
-  const [taskUrl, setTaskUrl] = useState('');
   const [taskDueDate, setTaskDueDate] = useState('');
   const [tasks, setTasks] = useState([
     {
@@ -146,12 +155,23 @@ export default function CenterDashboardPage() {
       const res = await fetch('/api/center/overview');
       if (res.ok) {
         const data = await res.json();
+        
+        const center = data.center || data.centerInfo;
+        const centerName = center?.name || 'Khanna Branch';
+        const centerLogo = center?.logoUrl || '';
+        const centerId = center?.id || '';
+
+        setEditCenterName(centerName);
+
         if (data.stats) {
           const gross = Number(data.stats.totalGrossCollected || 0);
           const retained = Number(data.stats.netRetainedShare ?? (gross - Number(data.stats.hqRoyalty ?? 0)));
           const royalty = Number(data.stats.hqRoyalty !== undefined ? data.stats.hqRoyalty : gross - retained);
 
           setRealStats({
+            id: centerId,
+            name: centerName,
+            logoUrl: centerLogo,
             totalGrossCollected: gross,
             netRetainedShare: retained,
             totalPendingEmis: Number(data.stats.totalPendingEmis || 0),
@@ -219,10 +239,9 @@ export default function CenterDashboardPage() {
   useEffect(() => {
     if (activeTab === 'teachers') void fetchTeachers();
     if (activeTab === 'admissions') void fetchStudents();
-    if (activeTab === 'revenue') void fetchOverviewData();
+    if (activeTab === 'revenue' || activeTab === 'settings') void fetchOverviewData();
   }, [activeTab]);
 
-  // Bulk Notification: Sabhi ko ek sath bhejna
   const handleTriggerBulkEmiAlerts = async () => {
     setDispatchingEmiAlerts(true);
     setEmiNotice({ type: '', text: '' });
@@ -247,18 +266,15 @@ export default function CenterDashboardPage() {
     }
   };
 
-  // Individual Notification: Sirf ek student ko bhejna
   const handleSendSingleAlert = async (studentId: string, studentName: string) => {
     setSingleSendingId(studentId);
     setEmiNotice({ type: '', text: '' });
-
     try {
       const res = await fetch('/api/center/emi-notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ studentId }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to dispatch individual alert');
 
@@ -274,18 +290,15 @@ export default function CenterDashboardPage() {
     }
   };
 
-  // Step A: Send OTP to official email
   const handleSendEmailOtp = async (target: 'TEACHER' | 'STUDENT') => {
     const targetEmail = target === 'TEACHER' ? teacherEmail : candidateEmail;
     if (!targetEmail || !targetEmail.includes('@')) {
       setOtpNotice({ type: 'error', text: 'Please enter a valid official email first.' });
       return;
     }
-
     setOtpTargetType(target);
     setOtpStage('SENDING');
     setOtpNotice({ type: '', text: '' });
-
     try {
       const res = await fetch('/api/auth/otp', {
         method: 'POST',
@@ -306,17 +319,14 @@ export default function CenterDashboardPage() {
     }
   };
 
-  // Step B: Verify OTP Code
   const handleVerifyOtp = async () => {
     const targetEmail = otpTargetType === 'TEACHER' ? teacherEmail : candidateEmail;
     if (!enteredOtp || enteredOtp.length < 6) {
       setOtpNotice({ type: 'error', text: 'Enter the complete 6-digit code.' });
       return;
     }
-
     setIsSubmitting(true);
     setOtpNotice({ type: '', text: '' });
-
     try {
       const res = await fetch('/api/auth/otp', {
         method: 'PUT',
@@ -335,14 +345,12 @@ export default function CenterDashboardPage() {
     }
   };
 
-  // Step C: Finalize Teacher Creation in Database
   const handleFinalizeTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otpStage !== 'VERIFIED') {
       setOtpNotice({ type: 'error', text: 'Official email must be verified via OTP first.' });
       return;
     }
-
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/center/teachers', {
@@ -376,14 +384,12 @@ export default function CenterDashboardPage() {
     }
   };
 
-  // Step D: Finalize Student Admission in Database
   const handleRegisterCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otpStage !== 'VERIFIED') {
       setOtpNotice({ type: 'error', text: 'Candidate official email must be verified via OTP before registering.' });
       return;
     }
-
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/center/students', {
@@ -399,7 +405,6 @@ export default function CenterDashboardPage() {
           teacherId: assignedTeacherId || null,
         }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to enroll student.');
 
@@ -418,14 +423,11 @@ export default function CenterDashboardPage() {
     }
   };
 
-  // Step E: Record Installment Payment & Issue Bill
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudentForPay) return;
-
     setIsSubmittingPay(true);
     setPayNotice({ type: '', text: '' });
-
     try {
       const res = await fetch(`/api/center/students/${selectedStudentForPay.id}/payment`, {
         method: 'POST',
@@ -436,7 +438,6 @@ export default function CenterDashboardPage() {
           transactionRef,
         }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to record installment payment.');
 
@@ -456,6 +457,34 @@ export default function CenterDashboardPage() {
       setPayNotice({ type: 'error', text: err.message });
     } finally {
       setIsSubmittingPay(false);
+    }
+  };
+
+  const handleSaveCenterName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editCenterName.trim()) return;
+
+    setIsSavingSettings(true);
+    setSettingsNotice({ type: '', text: '' });
+
+    try {
+      const res = await fetch('/api/center/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editCenterName }),
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update branch name');
+
+      setRealStats((prev) => ({ ...prev, name: data.center.name }));
+      setSettingsNotice({ type: 'success', text: 'Branch name updated successfully!' });
+      
+      setTimeout(() => setSettingsNotice({ type: '', text: '' }), 3000);
+    } catch (err: any) {
+      setSettingsNotice({ type: 'error', text: err.message });
+    } finally {
+      setIsSavingSettings(false);
     }
   };
 
@@ -480,13 +509,17 @@ export default function CenterDashboardPage() {
           {/* Logo Header */}
           <div className={`p-6 border-b flex items-center justify-between ${isDarkMode ? 'border-white/10' : 'border-slate-200'}`}>
             <div className="flex items-center gap-3">
-              <BrandLogo size={48} />
+              {realStats.logoUrl ? (
+                <img src={realStats.logoUrl} alt="Center Logo" className="w-10 h-10 object-contain rounded-md" />
+              ) : (
+                <BrandLogo size={48} />
+              )}
               <div>
                 <h2 className={`text-xs font-black tracking-tight leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                  Khanna Branch
+                  {realStats.name}
                 </h2>
                 <span className="text-[9px] font-mono text-orange-500 font-bold tracking-wider mt-1 block">
-                  VIQ-KHN-01 NODE
+                  VIQ-KHN-NODE
                 </span>
               </div>
             </div>
@@ -578,7 +611,7 @@ export default function CenterDashboardPage() {
           </nav>
         </div>
 
-        {/* Sidebar Footer with Single Sign Out */}
+        {/* Sidebar Footer */}
         <div className={`p-4 border-t space-y-2 ${isDarkMode ? 'border-white/10' : 'border-slate-200'}`}>
           <div className={`p-3 rounded-xl border ${isDarkMode ? 'bg-white/[0.03] border-white/5' : 'bg-slate-100 border-slate-200'}`}>
             <p className="text-[10px] font-mono text-slate-400 uppercase">Center Scope</p>
@@ -622,7 +655,7 @@ export default function CenterDashboardPage() {
                 {activeTab === 'settings' && 'Branch Security & Configuration'}
               </h1>
               <p className="text-xs text-slate-400 mt-0.5">
-                VIQ Technologies — Khanna HQ Node (Isolated Scope)
+                VIQ Technologies — {realStats.name} (Isolated Scope)
               </p>
             </div>
           </div>
@@ -665,7 +698,7 @@ export default function CenterDashboardPage() {
             <h3 className={`text-2xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
               ₹{realStats.totalGrossCollected.toLocaleString('en-IN')}
             </h3>
-            <p className="text-[10px] font-mono text-slate-400">Collected at VIQ-KHN-01</p>
+            <p className="text-[10px] font-mono text-slate-400">Collected at Node</p>
           </div>
 
           {/* Center share */}
@@ -681,7 +714,7 @@ export default function CenterDashboardPage() {
             <h3 className="text-2xl font-black text-emerald-500">
               ₹{realStats.netRetainedShare.toLocaleString('en-IN')}
             </h3>
-            <p className="text-[10px] font-mono text-slate-400">Khanna Branch Profit</p>
+            <p className="text-[10px] font-mono text-slate-400">Branch Profit</p>
           </div>
 
           {/* HQ royalty */}
@@ -754,7 +787,7 @@ export default function CenterDashboardPage() {
                   isDarkMode ? 'bg-white/5 border-white/10 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-600'
                 }`}
               >
-                SINGLE-BRANCH SCOPE (VIQ-KHN-01)
+                SINGLE-BRANCH SCOPE
               </span>
             </div>
 
@@ -1375,17 +1408,68 @@ export default function CenterDashboardPage() {
 
         {/* DEPARTMENT 5: SETTINGS */}
         {activeTab === 'settings' && (
-          <div
-            className={`p-8 rounded-2xl border space-y-4 max-w-xl ${
-              isDarkMode ? 'bg-[#0D111A] border-white/10' : 'bg-white border-slate-200 shadow-sm'
-            }`}
-          >
-            <h3 className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-              Branch Security & Credentials
-            </h3>
-            <p className="text-xs text-slate-400">
-              Only authenticated faculty and students with verified official domain credentials can access the Khanna isolated branch workspace.
-            </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            
+            {/* Center Information Settings Card */}
+            <div className={`p-8 rounded-2xl border space-y-6 ${isDarkMode ? 'bg-[#0D111A] border-white/10' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div>
+                <h3 className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                  Center Identity Configuration
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Update your branch display name and branding details.
+                </p>
+              </div>
+
+              {settingsNotice.text && (
+                <div className={`p-3.5 rounded-xl text-xs flex items-center gap-2 ${settingsNotice.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-500' : 'bg-red-500/10 border border-red-500/20 text-red-500'}`}>
+                  {settingsNotice.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                  <span>{settingsNotice.text}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveCenterName} className="space-y-4">
+                <div>
+                  <label className="text-[11px] font-mono text-slate-400 uppercase font-bold block mb-1">
+                    Branch Display Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editCenterName}
+                    onChange={(e) => setEditCenterName(e.target.value)}
+                    placeholder="e.g. Khanna Branch"
+                    className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-orange-500/50 ${
+                      isDarkMode ? 'bg-[#121620] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+                    }`}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSavingSettings || editCenterName === realStats.name}
+                  className="w-full py-3 rounded-xl bg-orange-500 text-black font-bold text-xs hover:bg-orange-400 transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isSavingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  <span>Save Center Name</span>
+                </button>
+              </form>
+            </div>
+
+            {/* ✅ Logo Upload Component Card Added Here */}
+            <div>
+              {realStats.id ? (
+                <CenterLogoUpload
+                  currentLogo={realStats.logoUrl}
+                  onLogoUpdated={(logoUrl) => setRealStats((prev) => ({ ...prev, logoUrl }))}
+                />
+              ) : (
+                <div className="p-6 rounded-2xl bg-[#0D111A] border border-white/10 text-xs text-slate-400">
+                  Loading center configuration...
+                </div>
+              )}
+            </div>
+            
           </div>
         )}
       </main>

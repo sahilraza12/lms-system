@@ -100,6 +100,7 @@ model Center {
   authorizedPerson String
   phone            String
   address          String
+  logoUrl          String?  // ✅ NAYA FIELD: Center ke custom logo ke liye
   royaltyRate      Int      @default(25)
   isActive         Boolean  @default(true)
 
@@ -388,32 +389,32 @@ model TaskSubmission {
 // 13. MULTI-TIER ANNOUNCEMENT & NOTICE SYSTEM
 // ----------------------------------------------------
 model Announcement {
-  id          String         @id @default(uuid())
-  title       String
-  content     String         @db.Text
-  priority    NoticePriority @default(NORMAL)
+  id         String         @id @default(uuid())
+  title      String
+  content    String         @db.Text
+  priority   NoticePriority @default(NORMAL)
 
   // Sender Metadata
-  senderId    String
-  senderRole  Role           // SUPER_ADMIN, ADMIN, CENTER_ADMIN, TEACHER
-  senderName  String
+  senderId   String
+  senderRole Role           // SUPER_ADMIN, ADMIN, CENTER_ADMIN, TEACHER
+  senderName String
 
   // Scoping & Targeted Delivery
-  targetRole  Role?          // CENTER_ADMIN, TEACHER, STUDENT (Null = All)
-  centerId    String?        // Scope to specific center
-  center      Center?        @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  teacherId   String?        // Scope to specific teacher's cohort
-  teacher     Teacher?       @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  targetRole Role?          // CENTER_ADMIN, TEACHER, STUDENT (Null = All)
+  centerId   String?        // Scope to specific center
+  center     Center?        @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  teacherId  String?        // Scope to specific teacher's cohort
+  teacher    Teacher?       @relation(fields: [teacherId], references: [id], onDelete: Cascade)
 
   // Dispatch Telemetry
-  emailSent   Boolean        @default(false)
-  sentCount   Int            @default(0)
+  emailSent  Boolean        @default(false)
+  sentCount  Int            @default(0)
 
   // Portal Read Tracking
-  recipients  AnnouncementRecipient[]
+  recipients AnnouncementRecipient[]
 
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 
   @@index([targetRole, priority, createdAt(sort: Desc)])
   @@index([centerId, targetRole])

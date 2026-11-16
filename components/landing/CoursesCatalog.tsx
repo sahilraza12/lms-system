@@ -137,7 +137,7 @@ export default function CoursesCatalog() {
                     </span>
                     <span className="text-lg font-black font-mono">
                       ₹{Number(course.fee || 0).toLocaleString('en-IN')}
-                    </span>
+                    </span> 
                   </div>
 
                   <Link

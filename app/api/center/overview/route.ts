@@ -75,6 +75,7 @@ export async function GET(req: Request) {
         centerCode: true,
         phone: true,
         address: true,
+        logoUrl: true,
         royaltyRate: true,
       },
     });

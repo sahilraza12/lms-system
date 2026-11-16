@@ -24,7 +24,6 @@ import {
   Maximize2,
   Minimize2,
   Mic,
-  MicOff,
   Volume2,
   VolumeX
 } from 'lucide-react';
@@ -68,6 +67,7 @@ interface StudentProfile {
   courseName: string;
   batch: string;
   progress: number;
+  centerLogo?: string; // ✅ Dynamic Center Logo added
   feePlan?: {
     totalAmount: number;
     paidAmount: number;
@@ -184,6 +184,9 @@ export default function StudentPortalPage() {
         const resolvedProgress =
           dataProfile.billingSummary?.progress ?? s.progress ?? 85;
 
+        // ✅ Extract Custom Center Logo if available
+        const resolvedCenterLogo = s.center?.logoUrl || dataProfile.centerDetails?.logoUrl || dataProfile.center?.logoUrl || '';
+
         const paymentsList: PaymentRecord[] = (dataInvoices?.invoices || []).map((inv: any) => ({
           id: inv.id || inv.paymentId,
           receiptNo: inv.receiptNo || inv.invoiceNo || inv.id,
@@ -205,6 +208,7 @@ export default function StudentPortalPage() {
           courseName: resolvedCourse,
           batch: resolvedBatch,
           progress: resolvedProgress,
+          centerLogo: resolvedCenterLogo, // ✅ Saving Center Logo to state
           feePlan: {
             totalAmount,
             paidAmount,
@@ -533,9 +537,21 @@ export default function StudentPortalPage() {
     <div className="student-portal-theme min-h-screen bg-[#07090e] text-slate-100 font-sans selection:bg-orange-500 selection:text-white relative">
       <header className="sticky top-0 z-40 h-16 bg-[#0a0d14]/90 backdrop-blur-md px-6 sm:px-12 flex items-center justify-between border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <BrandLogo size={48} />
+          {/* ✅ DYNAMIC BRANDING: Center Logo Fallback */}
+          {student?.centerLogo ? (
+            <img 
+              src={student.centerLogo} 
+              alt="Center Logo" 
+              className="h-10 w-auto object-contain rounded-md" 
+            />
+          ) : (
+            <BrandLogo size={48} />
+          )}
           <div>
-            <span className="text-sm font-bold block text-white">VIQ Learning Cloud</span>
+            <span className="text-sm font-bold block text-white">
+              {/* Optional: Show batch/center name instead of VIQ Learning Cloud if custom logo is present */}
+              {student?.batch || 'VIQ Learning Cloud'}
+            </span>
             {student?.enrollmentNo && (
               <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-widest block font-medium">
                 CANDIDATE ID: {student.enrollmentNo}

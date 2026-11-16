@@ -8,7 +8,9 @@ function isAdmin(role: string) {
   return role === Role.SUPER_ADMIN || role === Role.ADMIN;
 }
 
+// ============================================================================
 // 1. Fetch All Centers with aggregate metrics
+// ============================================================================
 export async function GET() {
   try {
     const user = await getCurrentUser();
@@ -61,7 +63,9 @@ export async function GET() {
   }
 }
 
+// ============================================================================
 // 2. Create New Training Center & Branch Head User
+// ============================================================================
 export async function POST(req: Request) {
   try {
     const user = await getCurrentUser();
@@ -187,6 +191,48 @@ export async function POST(req: Request) {
             : 'Failed to create training center.',
       },
       { status: error instanceof SyntaxError ? 400 : 500 }
+    );
+  }
+}
+
+// ============================================================================
+// 3. Update Existing Training Center (Including Logo)
+// ============================================================================
+export async function PATCH(req: Request) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || !isAdmin(user.role)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { centerId, logoUrl } = body;
+
+    if (!centerId) {
+      return NextResponse.json({ error: 'Center ID is required.' }, { status: 400 });
+    }
+
+    // ✅ FIXED: TypeScript strict mode friendly data object
+    const updateData: { logoUrl?: string } = {};
+    if (logoUrl !== undefined) {
+      updateData.logoUrl = logoUrl;
+    }
+
+    const updatedCenter = await db.center.update({
+      where: { id: centerId },
+      data: updateData,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Center updated successfully.',
+      center: updatedCenter,
+    });
+  } catch (error: unknown) {
+    console.error('Update Center Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to update center.' },
+      { status: 500 }
     );
   }
 }

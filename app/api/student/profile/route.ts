@@ -38,6 +38,7 @@ export async function GET() {
             centerCode: true,
             phone: true,
             address: true,
+            logoUrl: true, // ✅ YAHAN UPDATE KIYA (Frontend ko logo pass hoga)
           },
         },
         course: {

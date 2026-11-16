@@ -63,6 +63,7 @@ interface StudentProfile {
   courseName: string;
   batch: string;
   progress: number;
+  centerLogo?: string;
   feePlan?: {
     totalAmount: number;
     paidAmount: number;
@@ -172,6 +173,7 @@ export default function StudentPortalPage() {
           courseName: resolvedCourse,
           batch: resolvedBatch,
           progress: resolvedProgress,
+          centerLogo: s.center?.logoUrl || '',
           feePlan: {
             totalAmount,
             paidAmount,
@@ -346,9 +348,13 @@ export default function StudentPortalPage() {
       {/* Top Navbar */}
       <header className="sticky top-0 z-40 h-16 bg-[#0a0d14]/90 backdrop-blur-md px-6 sm:px-12 flex items-center justify-between border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <BrandLogo size={48} />
+          {student?.centerLogo ? (
+            <img src={student.centerLogo} alt={`${student.batch} logo`} className="h-10 w-auto object-contain rounded-md" />
+          ) : (
+            <BrandLogo size={48} />
+          )}
           <div>
-            <span className="text-sm font-bold block text-white">VIQ Learning Cloud</span>
+            <span className="text-sm font-bold block text-white">{student?.batch || 'VIQ Learning Cloud'}</span>
             {student?.enrollmentNo && (
               <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-widest block font-medium">
                 CANDIDATE ID: {student.enrollmentNo}
