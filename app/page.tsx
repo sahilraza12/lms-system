@@ -15,11 +15,11 @@ export default function LandingPage() {
       {/* 2. Hero Section */}
       <HeroSection />
       
-      {/* 4. Solutions & Bento Features */}
+      4. Solutions & Bento Features
       <FeaturesGrid />
 
       {/* 5. Industrial Training Programs Catalog */}
-      <CoursesCatalog />
+      {/* <CoursesCatalog /> */}
 
       {/* 6. Public Certificate & Credential Verification Desk */}
       <VerifyCredential />
